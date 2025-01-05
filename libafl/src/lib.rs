@@ -64,6 +64,7 @@ extern crate libafl_derive;
 #[doc(hidden)]
 pub use libafl_derive::*;
 
+pub mod bitmap;
 pub mod common;
 pub use common::*;
 pub mod corpus;
