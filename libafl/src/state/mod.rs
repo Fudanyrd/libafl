@@ -9,6 +9,7 @@ use core::{
     marker::PhantomData,
     time::Duration,
 };
+use std::io::BufRead;
 #[cfg(feature = "std")]
 use std::{
     fs,
@@ -40,9 +41,16 @@ use crate::{
     stages::{HasCurrentStageId, HasNestedStageStatus, StageId},
     Error, HasMetadata, HasNamedMetadata,
 };
+use crate::bitmap::Bitmap;
 
 /// The maximum size of a testcase
 pub const DEFAULT_MAX_SIZE: usize = 1_048_576;
+
+/// map size
+pub const MAP_SIZE: usize = 1 << 16;
+
+/// successor size
+pub const MAX_SUCCESSOR_COUNT: usize = 1024;
 
 /// The [`State`] of the fuzzer.
 /// Contains all important information about the current run.
@@ -294,6 +302,23 @@ pub struct StdState<I, C, R, SC> {
     stop_requested: bool,
     stage_stack: StageStack,
     phantom: PhantomData<I>,
+    /// needed by our setcover method.
+    global_frontier_bitmap: Bitmap,
+    initial_frontier_bitmap: Bitmap,
+    local_covered: Bitmap,
+    recent_frontier_nodes: Vec<u32>,
+    frontier_discovery_time: Vec<u32>,
+    recent_frontier_count: u32,
+    global_covered_frontier_nodes_count: u32,
+    covered_seed_list_counter: u32,
+    covered_fast_seed_list_counter: u32,
+    use_setcover_scheduling: bool,
+    removed_frontier_found: bool,
+    new_frontier_found: bool,
+    global_frontier_updated: bool,
+    /// forkserver
+    successor_map: Vec<Vec<u32> >,
+    successor_count: Vec<u32>,
 }
 
 impl<I, C, R, SC> UsesInput for StdState<I, C, R, SC>
@@ -1152,6 +1177,70 @@ where
         self.generate_initial_internal(fuzzer, executor, generator, manager, num, false)
     }
 
+    fn load_cfg(&mut self) {
+        self.successor_count = vec![0; MAP_SIZE];
+        for _i in 0..MAP_SIZE {
+            self.successor_map.push(vec![0; MAX_SUCCESSOR_COUNT]);
+        }
+
+        // load environment variable AFL_CFG_PATH
+        if let Ok(cfg_path) = std::env::var("AFL_CFG_PATH") {
+            let cfg_path: &Path = Path::new(&cfg_path);
+            if cfg_path.exists() {
+                use std::fs::File;
+                use std::io::BufReader;
+                use alloc::string::String;
+                let cfg_file: File = File::open(cfg_path)
+                    .unwrap();
+                let mut src: usize;
+                let mut dst: usize;
+
+                let mut buffer: String = String::new();
+                let mut reader: BufReader<File> = BufReader::new(cfg_file);
+                // while (fscanf(cfg_file, "%u %u") == 2) 
+                loop {
+                    buffer.clear();
+                    let ret: Result<usize, std::io::Error> = reader
+                        .read_line(&mut buffer);
+                    if ret.is_err() {
+                        break;
+                    }
+                    if buffer.is_empty() {
+                        break;
+                    }
+                    let v: Vec<&str> = buffer.split_whitespace().collect();
+                    if v.len() != 2 {
+                        panic!("invalid cfg file");
+                    }
+                    assert_eq!(v.len(), 2);
+                    src = v[0].parse::<usize>()
+                        .unwrap();
+                    dst = v[1].parse::<usize>()
+                        .unwrap();
+
+                    let cnt: usize = self.successor_count[src] as usize;
+                    self.successor_map[src][cnt] = dst as u32;
+                    self.successor_count[src] += 1;
+                }
+            } else {
+                panic!("AFL_CFG_PATH not exists");
+            }
+        } else {
+            panic!("AFL_CFG_PATH not set");
+        }
+    }
+
+    /// Change scheduling method to setcover.
+    pub fn use_setcover_schedule(&mut self) {
+        if self.use_setcover_scheduling {
+            return;
+        }
+        self.use_setcover_scheduling = true;
+        self.load_cfg();
+
+        // FIXME: initialize bitmaps here.
+    }
+
     /// Creates a new `State`, taking ownership of all of the individual components during fuzzing.
     pub fn new<F, O>(
         rand: R,
@@ -1192,6 +1281,21 @@ where
             phantom: PhantomData,
             #[cfg(feature = "std")]
             multicore_inputs_processed: None,
+            global_frontier_bitmap: Bitmap::new(0),
+            initial_frontier_bitmap: Bitmap::new(0),
+            local_covered: Bitmap::new(0),
+            recent_frontier_nodes: vec![],
+            frontier_discovery_time: vec![],
+            recent_frontier_count: 0,
+            global_covered_frontier_nodes_count: 0,
+            covered_fast_seed_list_counter: 0,
+            covered_seed_list_counter: 0,
+            new_frontier_found: false,
+            removed_frontier_found: false,
+            global_frontier_updated: false,
+            use_setcover_scheduling: false,
+            successor_map: vec![],
+            successor_count: vec![],
         };
         feedback.init_state(&mut state)?;
         objective.init_state(&mut state)?;
@@ -1394,5 +1498,43 @@ mod test {
     #[test]
     fn test_std_state() {
         StdState::nop::<BytesInput>().expect("couldn't instantiate the test state");
+    }
+
+    #[test]
+    fn test_load_cfg() {
+        // create a fake cfg file.
+        use std::io::Write;
+        let fname: &str = "/tmp/tmp_cfg";
+        let mut fobj: std::fs::File = std::fs::File::create(fname)
+            .unwrap();
+        let _ = fobj.write_all(b"0 1\n");
+        let _ = fobj.write_all(b"6  5\n");
+        let _ = fobj.sync_all();
+
+        // check that the loadcfg works
+        let mut state: StdState<BytesInput, _, _, _> =
+            StdState::nop::<BytesInput>()
+            .expect("couldn't instantiate the test state");
+
+        let key: &str = "AFL_CFG_PATH";
+        let old_cfg_path = std::env::var(key); 
+        std::env::set_var(key, fname);
+
+        state.use_setcover_schedule();
+        assert_eq!(state.successor_count[0], 1);
+        assert_eq!(state.successor_count[6], 1);
+        assert_eq!(state.successor_map[0][0], 1);
+        assert_eq!(state.successor_map[6][0], 5);
+
+        // recover old env var
+        if old_cfg_path.is_ok() {
+            std::env::set_var(key, old_cfg_path.unwrap());
+        } else {
+            std::env::remove_var(key);
+        }
+
+        // remove the temporay file.
+        std::fs::remove_file(fname)
+            .unwrap();
     }
 }

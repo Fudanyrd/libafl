@@ -94,6 +94,7 @@ mod tests {
     #[test]
     fn test_bitmap() {
         let mut bitmap = Bitmap::new(8);
+        assert_eq!(bitmap.len(), 8);
         for i in 0..bitmap.len() {
             assert_eq!(bitmap.get(i), false);
         }
