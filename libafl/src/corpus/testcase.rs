@@ -360,6 +360,14 @@ impl<I> Testcase<I> {
             ))
     }
 
+    /// Get whether to trace bytes.
+    pub fn trace_mini(&self) -> Result<bool, Error> {
+        Err(Error::Unsupported(
+                "Setcover schedule is not supported for OnDiskCorpus".into(),
+                ErrorBacktrace::new(),
+            ))
+    }
+
 }
 
 impl<I> Default for Testcase<I> {

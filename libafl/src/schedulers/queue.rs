@@ -24,7 +24,9 @@ where
 {
     fn on_add(&mut self, state: &mut S, id: CorpusId) -> Result<(), Error> {
         // Set parent id
-        let current_id = *state.corpus().current();
+        let current_id: Option<CorpusId> = *state
+            .corpus()
+            .current();
         state
             .corpus()
             .get(id)?

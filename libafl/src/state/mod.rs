@@ -323,10 +323,15 @@ pub struct StdState<I, C, R, SC> {
     removed_frontier_found: bool,
     new_frontier_found: bool,
     global_frontier_updated: bool,
+    /// record changes of bitmap score
+    score_changed: bool,
     /// forkserver
     successor_map: Vec<Vec<u32> >,
     successor_count: Vec<u32>,
     virgin_bits: Vec<u8>,
+    trace_bits: Vec<u8>,
+    /// Top entries for bitmap bytes
+    top_rated: Vec<Option<CorpusId> >,
 }
 
 impl<I, C, R, SC> UsesInput for StdState<I, C, R, SC>
@@ -1274,6 +1279,33 @@ where
         }
     }
 
+    fn is_frontier_node_inner(&self, edge_id: usize) -> bool {
+        let num_successors: u32 = self.successor_count[edge_id];
+        if num_successors <= 1 {
+            return false;
+        } else {
+            let mut not_visited: bool = false;
+
+            for i in 0..num_successors {
+                let successors: &Vec<u32> = &self.successor_map[edge_id];
+                let succ_id: &u32 = successors
+                    .get(i as usize)
+                    .unwrap();
+
+                let virgin_status: u8 = self
+                    .virgin_bits[*succ_id as usize];
+                let current_status: u8 = self 
+                    .trace_bits[*succ_id as usize];
+
+                if virgin_status == 0xff && current_status == 0x00 {
+                    not_visited = true;
+                    break;
+                }
+            }
+            return not_visited;
+        }
+    }
+
     /// Update global frontier nodes
     pub fn update_global_frontier_nodes(&mut self, id: CorpusId) {
         let mut updated_coverage_count: u32 = 0;
@@ -1583,6 +1615,59 @@ where
         }
     }
 
+    /// Update bitmap score.
+    pub fn update_bitmap_score(&mut self, id: CorpusId) {
+        let trace_len = self
+            .trace_bits 
+            .len();
+
+        for i in 0..trace_len {
+            if self.trace_bits[i] != 0 {
+                let edge_id: usize = i;
+
+                if self.is_frontier_node_inner(edge_id) {
+
+                    // update this edge.
+                    if true {
+                        let mut input_ref: RefMut<'_, Testcase<I>> = self
+                            .corpus()
+                            .get(id)
+                            .unwrap()
+                            .borrow_mut();
+
+                        let input: &mut Testcase<I> = input_ref 
+                            .deref_mut();
+
+                        let frontier_bitmap: &mut Bitmap = input
+                            .frontier_node_bitmap_mut()
+                            .unwrap();
+                        frontier_bitmap.set(edge_id);
+
+                        let nodes_count: u32 = input 
+                            .covered_frontier_nodes_count()
+                            .unwrap();
+                        let _res: Result<(), Error> =  input
+                            .set_covered_frontier_nodes_count(nodes_count + 1);
+                    }
+
+                    // update global frontier bitmap.
+                    if true {
+                        let global_frontier_bitmap: &mut Bitmap = &mut self.global_frontier_bitmap;
+                        if !global_frontier_bitmap.get(edge_id) {
+                            global_frontier_bitmap.set(edge_id);
+                            self.global_covered_frontier_nodes_count += 1;
+                        }
+                    }
+                }
+
+                self 
+                    .top_rated[i] = Some(id);
+                // FIXME: add a byte tracer for queue entry.
+                self.score_changed = true;
+            }
+        }
+    }
+
     /// Creates a new `State`, taking ownership of all of the individual components during fuzzing.
     pub fn new<F, O>(
         rand: R,
@@ -1636,9 +1721,12 @@ where
             removed_frontier_found: false,
             global_frontier_updated: false,
             use_setcover_scheduling: false,
+            score_changed: false,
             successor_map: vec![],
             successor_count: vec![],
             virgin_bits: vec![],
+            trace_bits: vec![],
+            top_rated: vec![None; MAP_SIZE],
         };
         feedback.init_state(&mut state)?;
         objective.init_state(&mut state)?;
