@@ -1,5 +1,7 @@
 //! Bitmap module for managing bit information.
 use alloc::vec::Vec;
+use std::fs::File;
+use std::io::Read;
 
 /// Bitmap structure used to store bit information.
 #[derive(Debug, Clone)]
@@ -92,6 +94,16 @@ impl Default for Bitmap {
     }
 }
 
+
+/// Open /dev/random and read 8 bytes
+pub fn getrand64() -> usize {
+    // open /dev/random
+    let mut fobj: File = File::open("/dev/random").unwrap();
+    let mut buf: [u8; 8] = [0; 8];
+    fobj.read(&mut buf).unwrap();
+    return usize::from_be_bytes(buf);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -109,5 +121,14 @@ mod tests {
 
         bitmap.clear(0);
         assert_eq!(bitmap.get(0), false);
+    }
+
+    #[test]
+    fn test_random() {
+        for _i in 0..5 {
+            println!("{}", getrand64());
+        }
+
+        // OK
     }
 }
