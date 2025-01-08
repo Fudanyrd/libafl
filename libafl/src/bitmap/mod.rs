@@ -79,6 +79,11 @@ impl Bitmap {
 
         self.buf[idx / 8] &= !(1 << (idx % 8));
     }
+
+    /// Clear all bits in the bitmap.
+    pub fn clear_all(&mut self) {
+        self.buf.fill(0);
+    }
 }
 
 impl Default for Bitmap {
