@@ -11,11 +11,11 @@ use core::{
 #[cfg(feature = "std")]
 use std::path::PathBuf;
 
-use libafl_bolts::{serdeany::SerdeAnyMap, HasLen};
+use libafl_bolts::{serdeany::SerdeAnyMap, ErrorBacktrace, HasLen};
 use serde::{Deserialize, Serialize};
 
 use super::Corpus;
-use crate::{corpus::CorpusId, state::HasCorpus, Error, HasMetadata};
+use crate::{bitmap::Bitmap, corpus::CorpusId, state::HasCorpus, Error, HasMetadata};
 
 /// Shorthand to receive a [`Ref`] or [`RefMut`] to a stored [`Testcase`], by [`CorpusId`].
 /// For a normal state, this should return a [`Testcase`] in the corpus, not the objectives.
@@ -318,6 +318,48 @@ impl<I> Testcase<I> {
     pub fn found_objective(&mut self) {
         self.objectives_found = self.objectives_found.saturating_add(1);
     }
+
+    /// Use the setcover reduction method.
+    pub fn use_setcover_schedule(&mut self) -> Result<(), Error> {
+        // FIXME: add implementation
+        Err(Error::Unsupported(
+                "Setcover schedule is not supported for OnDiskCorpus".into(),
+                ErrorBacktrace::new(),
+            ))
+    }
+
+    /// Get the bitmap of frontier nodes
+    pub fn frontier_node_bitmap(&self) -> Result<&'static Bitmap, Error> {
+        Err(Error::Unsupported(
+                "Setcover schedule is not supported for OnDiskCorpus".into(),
+                ErrorBacktrace::new(),
+            ))
+    }
+
+    /// Get the bitmap of frontier nodes (mutable)
+    pub fn frontier_node_bitmap_mut(&mut self) -> Result<&'static mut Bitmap, Error> {
+        Err(Error::Unsupported(
+                "Setcover schedule is not supported for OnDiskCorpus".into(),
+                ErrorBacktrace::new(),
+            ))
+    }
+
+    /// Get the number of frontier nodes that are covered
+    pub fn covered_frontier_nodes_count(&self) -> Result<u32, Error> {
+        Err(Error::Unsupported(
+                "Setcover schedule is not supported for OnDiskCorpus".into(),
+                ErrorBacktrace::new(),
+            ))
+    }
+
+    /// Set the number of frontier nodes that are covered
+    pub fn set_covered_frontier_nodes_count(&mut self, _count: u32) -> Result<(), Error> {
+        Err(Error::Unsupported(
+                "Setcover schedule is not supported for OnDiskCorpus".into(),
+                ErrorBacktrace::new(),
+            ))
+    }
+
 }
 
 impl<I> Default for Testcase<I> {

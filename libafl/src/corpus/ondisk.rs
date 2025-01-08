@@ -16,7 +16,13 @@ use libafl_bolts::serdeany::SerdeAnyMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    corpus::{CachedOnDiskCorpus, Corpus, CorpusId, HasTestcase, Testcase},
+    corpus::{
+        CachedOnDiskCorpus, 
+        Corpus, 
+        CorpusId, 
+        HasTestcase, 
+        Testcase
+    },
     inputs::Input,
     Error,
 };

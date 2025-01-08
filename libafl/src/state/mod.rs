@@ -3,11 +3,7 @@
 #[cfg(feature = "std")]
 use alloc::vec::Vec;
 use core::{
-    borrow::BorrowMut,
-    cell::{Ref, RefMut},
-    fmt::Debug,
-    marker::PhantomData,
-    time::Duration,
+    borrow::BorrowMut, cell::{Ref, RefMut}, fmt::Debug, marker::PhantomData, ops::{Deref, DerefMut}, time::Duration
 };
 use std::io::BufRead;
 #[cfg(feature = "std")]
@@ -330,6 +326,7 @@ pub struct StdState<I, C, R, SC> {
     /// forkserver
     successor_map: Vec<Vec<u32> >,
     successor_count: Vec<u32>,
+    virgin_bits: Vec<u8>,
 }
 
 impl<I, C, R, SC> UsesInput for StdState<I, C, R, SC>
@@ -1252,6 +1249,133 @@ where
         // FIXME: initialize bitmaps here.
     }
 
+    fn is_frontier_node_outer(&self, edge_id: usize) -> bool {
+        let num_successors: u32 = self.successor_count[edge_id];
+        if num_successors <= 1 {
+            return false;
+        } else {
+            let mut not_visited: bool = false;
+
+            for i in 0..num_successors {
+                let successors: &Vec<u32> = &self.successor_map[edge_id];
+                let succ_id: &u32 = successors
+                    .get(i as usize)
+                    .unwrap();
+
+                let succ_status = self
+                    .virgin_bits[*succ_id as usize];
+
+                if succ_status == 0xff {
+                    not_visited = true;
+                    break;
+                }
+            }
+            return not_visited;
+        }
+    }
+
+    /// Update global frontier nodes
+    pub fn update_global_frontier_nodes(&mut self, id: CorpusId) {
+        let mut updated_coverage_count: u32 = 0;
+        let mut init_count: u32 = 0;
+        let mut real_map_size: usize = 0;
+
+        // get number of covered frontier nodes from input
+        if true {
+            let input_ref: RefMut<'_, Testcase<I>>= self   
+                .corpus()
+                .get(id)
+                .unwrap()
+                .borrow_mut();
+            let input: &Testcase<I> = input_ref
+                .deref();
+    
+            init_count = input 
+                .covered_frontier_nodes_count()
+                .unwrap();
+
+            real_map_size = input 
+                .frontier_node_bitmap()
+                .unwrap()
+                .len();
+            assert!(real_map_size != 0);
+        }
+
+        let mut count: u32 = 0;
+        for i in 0..(real_map_size / 8) {
+            let mut current: u8 = 0;
+            if true {
+                let input_ref: RefMut<'_, Testcase<I>>= self   
+                    .corpus()
+                    .get(id)
+                    .unwrap()
+                    .borrow_mut();
+                current = input_ref 
+                    .deref()
+                    .frontier_node_bitmap()
+                    .unwrap()
+                    .get_ubyte(i);
+            }
+            if current == 0 {
+                continue;
+            }
+
+            for bit in 0 .. (8) {
+                let edge_id: usize = (i * 8) + bit;
+                assert!(edge_id >= (i * 8));
+                if (current & (1 << bit)) != 0 {
+                    assert!(edge_id < real_map_size);
+
+                    if !self.is_frontier_node_outer(edge_id) {
+                        count += 1;
+                        if self
+                            .global_frontier_bitmap
+                            .get(edge_id) {
+                            self 
+                                .global_frontier_bitmap
+                                .clear(edge_id);
+
+                            self.global_covered_frontier_nodes_count -= 1;
+                        }
+
+                        current = current & !(1 << bit);
+                    }
+                }
+            }
+
+            // frontier_node_bitmap[i] = current;
+            if true {
+                let mut input_ref: RefMut<'_, Testcase<I>>= self   
+                    .corpus()
+                    .get(id)
+                    .unwrap()
+                    .borrow_mut();
+                input_ref 
+                    .deref_mut()
+                    .frontier_node_bitmap_mut()
+                    .unwrap()
+                    .set_ubyte(i, current);
+            }
+            updated_coverage_count += popcount8(current) as u32;
+        }
+
+        // q->covered_frontier_nodes_count = updated_coverage_count;
+        if true {
+            let mut input_ref: RefMut<'_, Testcase<I>>= self   
+                .corpus()
+                .get(id)
+                .unwrap()
+                .borrow_mut();
+            let _res: Result<(), Error> = input_ref 
+                .deref_mut()
+                .set_covered_frontier_nodes_count(updated_coverage_count);
+        }
+        if self.global_covered_frontier_nodes_count == 0 {
+            println!("Seed id {}, initial count {}, count {}", id, init_count, count);
+            panic!("global_covered_frontier_nodes_count is 0");
+        }
+    }
+
     /// Perform seed reduction.
     pub fn setcover_reduction(&mut self) {
         assert!(self.use_setcover_scheduling);
@@ -1276,14 +1400,19 @@ where
         let mut max_exec_us: f64 = 0.0;
         
         use core::ops::Deref;
-        // compute execution time statistics,
-        // and count the number of seeds
+
         for it in self.corpus().ids() {
             all_seeds.push(it);
+        }
+
+        // compute execution time statistics,
+        // and count the number of seeds
+        for it in &all_seeds {
+            self.update_global_frontier_nodes(*it);
 
             let input_ref: Ref<'_, Testcase<I>>  = self
                 .corpus()
-                .get(it)
+                .get(*it)
                 .unwrap()
                 .borrow();
 
@@ -1303,14 +1432,13 @@ where
             total_exec_us_sq += exec_time_us * exec_time_us;
             max_exec_us = max_exec_us.max(exec_time_us);
 
-            let covered_frontier_nodes_count = self
-                .corpus()
+            let covered_frontier_nodes_count = input 
                 .covered_frontier_nodes_count()
                 .unwrap();
 
             if covered_frontier_nodes_count > 0 {
                 unselected_seeds_count += 1;
-                unselected_seeds.push(it);
+                unselected_seeds.push(*it);
             }
         }
         
@@ -1510,6 +1638,7 @@ where
             use_setcover_scheduling: false,
             successor_map: vec![],
             successor_count: vec![],
+            virgin_bits: vec![],
         };
         feedback.init_state(&mut state)?;
         objective.init_state(&mut state)?;

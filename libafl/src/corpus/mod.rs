@@ -1,6 +1,7 @@
 //! Corpuses contain the testcases, either in memory, on disk, or somewhere else.
 
 pub mod testcase;
+use libafl_bolts::ErrorBacktrace;
 pub use testcase::{HasTestcase, SchedulerTestcaseMetadata, Testcase};
 
 pub mod inmemory;
@@ -196,6 +197,14 @@ pub trait Corpus: Sized {
     {
         let mut testcase = self.get(id)?.borrow_mut();
         Ok(testcase.load_input(self)?.clone())
+    }
+
+    /// Set the id of favored seed.
+    fn set_favored_id(&mut self, _id: CorpusId) -> Result<(), Error> {
+        Err(Error::Unsupported(
+                "Setcover schedule is not supported for OnDiskCorpus".into(),
+                ErrorBacktrace::new(),
+            ))
     }
 }
 

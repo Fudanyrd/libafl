@@ -56,6 +56,28 @@ impl Bitmap {
         (byte & (1 << (idx % 8))) != 0
     }
 
+    /// Get a specific byte index.
+    pub fn get_ubyte(&self, idx: usize) -> u8 {
+        // the length of bitmap is always a multiple of 8
+        assert_eq!(self.len() % 8, 0);
+
+        if idx >= self.len() / 8 {
+            panic!("index out of range");
+        }
+
+        let byte = self.buf[idx / 8];
+        return byte;
+    }
+
+    /// Set a specific byte index.
+    pub fn set_ubyte(&mut self, idx: usize, byte: u8) {
+        if idx >= self.len() / 8 {
+            panic!("index out of range");
+        }
+
+        self.buf[idx / 8] = byte;
+    }
+
     /// Sets a specific bit index.
     ///
     /// # Arguments
