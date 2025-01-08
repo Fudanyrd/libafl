@@ -21,6 +21,13 @@ pub struct SetcoverScheduler {
 
 impl<I, S> RemovableScheduler<I, S> for SetcoverScheduler {}
 
+impl SetcoverScheduler {
+    /// Creates a new [`SetcoverScheduler`].
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
 impl<I, S> Scheduler<I, S> for SetcoverScheduler 
 where
     S: HasCorpus

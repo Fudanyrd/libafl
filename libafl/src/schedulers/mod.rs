@@ -24,6 +24,8 @@ pub mod accounting;
 pub use accounting::CoverageAccountingScheduler;
 
 pub mod setcover;
+pub use setcover::SetcoverScheduler;
+
 pub mod weighted;
 pub use weighted::{StdWeightedScheduler, WeightedScheduler};
 
