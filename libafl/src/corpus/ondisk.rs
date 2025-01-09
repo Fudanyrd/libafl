@@ -16,13 +16,7 @@ use libafl_bolts::serdeany::SerdeAnyMap;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    corpus::{
-        CachedOnDiskCorpus, 
-        Corpus, 
-        CorpusId, 
-        HasTestcase, 
-        Testcase
-    },
+    corpus::{CachedOnDiskCorpus, Corpus, CorpusId, HasTestcase, Testcase},
     inputs::Input,
     Error,
 };
@@ -60,6 +54,8 @@ pub struct OnDiskCorpus<I> {
     dir_path: PathBuf,
     /// We wrapp a cached corpus and set its size to 1.
     inner: CachedOnDiskCorpus<I>,
+    /// favored id of seed.
+    favored_id: Option<CorpusId>,
 }
 
 impl<I> Corpus for OnDiskCorpus<I>
@@ -178,6 +174,19 @@ where
     fn store_input_from(&self, testcase: &Testcase<Self::Input>) -> Result<(), Error> {
         self.inner.store_input_from(testcase)
     }
+
+    fn set_favored_id(&mut self, id: CorpusId) -> Result<(), Error> {
+        self.favored_id = Some(id);
+        Ok(())
+    }
+
+    fn get_favored_id(&self) -> Option<CorpusId> {
+        if self.favored_id == None {
+            None
+        } else {
+            Some(self.favored_id.unwrap())
+        }
+    }
 }
 
 impl<I> HasTestcase for OnDiskCorpus<I>
@@ -274,6 +283,7 @@ impl<I> OnDiskCorpus<I> {
                 prefix,
                 locking,
             )?,
+            favored_id: None,
         })
     }
 

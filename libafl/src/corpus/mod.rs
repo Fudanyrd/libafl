@@ -202,9 +202,14 @@ pub trait Corpus: Sized {
     /// Set the id of favored seed.
     fn set_favored_id(&mut self, _id: CorpusId) -> Result<(), Error> {
         Err(Error::Unsupported(
-                "Setcover schedule is not supported for OnDiskCorpus".into(),
-                ErrorBacktrace::new(),
-            ))
+            "Setcover schedule is not supported for OnDiskCorpus".into(),
+            ErrorBacktrace::new(),
+        ))
+    }
+
+    /// Get the id of favored seed.
+    fn get_favored_id(&self) -> Option<CorpusId> {
+        None
     }
 }
 

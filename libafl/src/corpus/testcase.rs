@@ -352,10 +352,7 @@ impl<I> Testcase<I> {
                 ErrorBacktrace::new(),
             ));
         } else {
-            return Ok(self.frontier_node_bitmap
-                        .as_ref()
-                        .unwrap()
-                    );
+            return Ok(self.frontier_node_bitmap.as_ref().unwrap());
         }
     }
 
@@ -367,10 +364,7 @@ impl<I> Testcase<I> {
                 ErrorBacktrace::new(),
             ));
         } else {
-            return Ok(self.frontier_node_bitmap
-                        .as_mut()
-                        .unwrap()
-                    );
+            return Ok(self.frontier_node_bitmap.as_mut().unwrap());
         }
     }
 
@@ -402,11 +396,10 @@ impl<I> Testcase<I> {
     /// Get whether to trace bytes.
     pub fn trace_mini(&self) -> Result<bool, Error> {
         Err(Error::Unsupported(
-                "Setcover schedule is not supported for OnDiskCorpus".into(),
-                ErrorBacktrace::new(),
-            ))
+            "Setcover schedule is not supported for OnDiskCorpus".into(),
+            ErrorBacktrace::new(),
+        ))
     }
-
 }
 
 impl<I> Default for Testcase<I> {

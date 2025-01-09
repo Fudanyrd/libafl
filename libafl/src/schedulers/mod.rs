@@ -120,20 +120,15 @@ where
         .ok_or_else(|| Error::key_not_found("MapObserver not found".to_string()))?
         .as_ref();
 
-    let mut hash: usize = observer
-        .hash_simple() as usize;
+    let mut hash: usize = observer.hash_simple() as usize;
 
-    let psmeta: &mut SchedulerMetadata = state
-        .metadata_mut::<SchedulerMetadata>()?;
+    let psmeta: &mut SchedulerMetadata = state.metadata_mut::<SchedulerMetadata>()?;
 
     hash %= psmeta.n_fuzz().len();
     // Update the path frequency
-    psmeta.n_fuzz_mut()[hash] = psmeta
-        .n_fuzz()[hash]
-        .saturating_add(1);
+    psmeta.n_fuzz_mut()[hash] = psmeta.n_fuzz()[hash].saturating_add(1);
 
-    scheduler
-        .set_last_hash(hash);
+    scheduler.set_last_hash(hash);
 
     Ok(())
 }
@@ -146,16 +141,16 @@ where
     let current_id = *state.corpus().current();
 
     if let Some(id) = current_id {
-        let mut testcase: core::cell::RefMut<'_, Testcase<<<S as HasCorpus>::Corpus as Corpus>::Input>> = state.testcase_mut(id)?;
-        let tcmeta = testcase
-            .metadata_mut::<SchedulerTestcaseMetadata>()?;
+        let mut testcase: core::cell::RefMut<
+            '_,
+            Testcase<<<S as HasCorpus>::Corpus as Corpus>::Input>,
+        > = state.testcase_mut(id)?;
+        let tcmeta = testcase.metadata_mut::<SchedulerTestcaseMetadata>()?;
 
         if tcmeta.handicap() >= 4 {
-            tcmeta
-                .set_handicap(tcmeta.handicap() - 4);
+            tcmeta.set_handicap(tcmeta.handicap() - 4);
         } else if tcmeta.handicap() > 0 {
-            tcmeta
-                .set_handicap(tcmeta.handicap() - 1);
+            tcmeta.set_handicap(tcmeta.handicap() - 1);
         }
     }
 
