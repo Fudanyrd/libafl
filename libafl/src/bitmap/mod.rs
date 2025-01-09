@@ -4,8 +4,7 @@ use std::fs::File;
 use std::io::Read;
 
 /// Bitmap structure used to store bit information.
-#[derive(Debug, Clone)]
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct Bitmap {
     /// Byte array storing the bit information.
     pub buf: Vec<u8>,
@@ -115,7 +114,6 @@ impl Default for Bitmap {
         Self::new(0)
     }
 }
-
 
 /// Open /dev/random and read 8 bytes
 pub fn getrand64() -> usize {

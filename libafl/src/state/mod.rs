@@ -3,7 +3,12 @@
 #[cfg(feature = "std")]
 use alloc::vec::Vec;
 use core::{
-    borrow::BorrowMut, cell::{Ref, RefMut}, fmt::Debug, marker::PhantomData, ops::{Deref, DerefMut}, time::Duration
+    borrow::BorrowMut,
+    cell::{Ref, RefMut},
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Deref, DerefMut},
+    time::Duration,
 };
 use std::io::BufRead;
 #[cfg(feature = "std")]
@@ -12,10 +17,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::bitmap::{
-    getrand64,
-    popcount8,
-};
+use crate::bitmap::{getrand64, popcount8};
 
 #[cfg(feature = "std")]
 use libafl_bolts::core_affinity::{CoreId, Cores};
@@ -28,6 +30,7 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 mod stack;
 pub use stack::StageStack;
 
+use crate::bitmap::Bitmap;
 #[cfg(feature = "introspection")]
 use crate::monitors::ClientPerfMonitor;
 #[cfg(feature = "scalability_introspection")]
@@ -42,7 +45,6 @@ use crate::{
     stages::{HasCurrentStageId, HasNestedStageStatus, StageId},
     Error, HasMetadata, HasNamedMetadata,
 };
-use crate::bitmap::Bitmap;
 
 /// The maximum size of a testcase
 pub const DEFAULT_MAX_SIZE: usize = 1_048_576;
@@ -238,6 +240,41 @@ pub trait HasLastReportTime {
     fn last_report_time_mut(&mut self) -> &mut Option<Duration>;
 }
 
+/// Trait for set cover scheduling
+pub trait HasSetCover {
+    /// Load the cfg file. Environment variable
+    /// AFL_CFG_PATH must be set.
+    fn load_cfg(&mut self);
+
+    /// Change scheduling method to setcover.
+    fn use_setcover_schedule(&mut self);
+
+    /// Check if the edge is a frontier node.
+    fn is_frontier_node_outer(&self, edge_id: usize) -> bool;
+
+    /// Check if the edge is a frontier node.
+    fn is_frontier_node_inner(&self, edge_id: usize) -> bool;
+
+    /// Update global frontier nodes.
+    fn update_global_frontier_nodes(&mut self, id: CorpusId);
+
+    /// Perform seed reduction.
+    fn setcover_reduction(&mut self);
+
+    /// Update bitmap score.
+    fn update_bitmap_score(&mut self, id: CorpusId);
+
+    /// Go over top rated entries and sequentially grab
+    /// winners for previously unseen bytes and marks
+    /// them as favored.
+    fn cull_queue(&mut self);
+
+    /// Write trace bits info to disk.
+    fn write_trace_bits_info(&self) {
+        panic!("not implemented yet");
+    }
+}
+
 /// Struct that holds the options for input loading
 #[cfg(feature = "std")]
 pub struct LoadConfig<'a, I, S, Z> {
@@ -324,12 +361,12 @@ pub struct StdState<I, C, R, SC> {
     /// record changes of bitmap score
     score_changed: bool,
     /// forkserver
-    successor_map: Vec<Vec<u32> >,
+    successor_map: Vec<Vec<u32>>,
     successor_count: Vec<u32>,
     virgin_bits: Vec<u8>,
     trace_bits: Vec<u8>,
     /// Top entries for bitmap bytes
-    top_rated: Vec<Option<CorpusId> >,
+    top_rated: Vec<Option<CorpusId>>,
     // FIXME: These are probably unused.
     // recent_frontier_nodes: Vec<u32>,
     // frontier_discovery_time: Vec<u32>,
@@ -1191,490 +1228,6 @@ where
         self.generate_initial_internal(fuzzer, executor, generator, manager, num, false)
     }
 
-    fn load_cfg(&mut self) {
-        self.successor_count = vec![0; MAP_SIZE];
-        for _i in 0..MAP_SIZE {
-            self.successor_map.push(vec![0; MAX_SUCCESSOR_COUNT]);
-        }
-
-        // load environment variable AFL_CFG_PATH
-        if let Ok(cfg_path) = std::env::var("AFL_CFG_PATH") {
-            let cfg_path: &Path = Path::new(&cfg_path);
-            if cfg_path.exists() {
-                use std::fs::File;
-                use std::io::BufReader;
-                use alloc::string::String;
-                let cfg_file: File = File::open(cfg_path)
-                    .unwrap();
-                let mut src: usize;
-                let mut dst: usize;
-
-                let mut buffer: String = String::new();
-                let mut reader: BufReader<File> = BufReader::new(cfg_file);
-                // while (fscanf(cfg_file, "%u %u") == 2) 
-                loop {
-                    buffer.clear();
-                    let ret: Result<usize, std::io::Error> = reader
-                        .read_line(&mut buffer);
-                    if ret.is_err() {
-                        break;
-                    }
-                    if buffer.is_empty() {
-                        break;
-                    }
-                    let v: Vec<&str> = buffer.split_whitespace().collect();
-                    if v.len() != 2 {
-                        panic!("invalid cfg file");
-                    }
-                    assert_eq!(v.len(), 2);
-                    src = v[0].parse::<usize>()
-                        .unwrap();
-                    dst = v[1].parse::<usize>()
-                        .unwrap();
-
-                    let cnt: usize = self.successor_count[src] as usize;
-                    self.successor_map[src][cnt] = dst as u32;
-                    self.successor_count[src] += 1;
-                }
-            } else {
-                panic!("AFL_CFG_PATH not exists");
-            }
-        } else {
-            panic!("AFL_CFG_PATH not set");
-        }
-    }
-
-    /// Change scheduling method to setcover.
-    pub fn use_setcover_schedule(&mut self) {
-        if self.use_setcover_scheduling {
-            return;
-        }
-        self.use_setcover_scheduling = true;
-        self.load_cfg();
-        self.virgin_bits = vec![0xff; MAP_SIZE];
-    }
-
-    fn is_frontier_node_outer(&self, edge_id: usize) -> bool {
-        let num_successors: u32 = self.successor_count[edge_id];
-        if num_successors <= 1 {
-            return false;
-        } else {
-            let mut not_visited: bool = false;
-
-            for i in 0..num_successors {
-                let successors: &Vec<u32> = &self.successor_map[edge_id];
-                let succ_id: &u32 = successors
-                    .get(i as usize)
-                    .unwrap();
-
-                let succ_status = self
-                    .virgin_bits[*succ_id as usize];
-
-                if succ_status == 0xff {
-                    not_visited = true;
-                    break;
-                }
-            }
-            return not_visited;
-        }
-    }
-
-    fn is_frontier_node_inner(&self, edge_id: usize) -> bool {
-        let num_successors: u32 = self.successor_count[edge_id];
-        if num_successors <= 1 {
-            return false;
-        } else {
-            let mut not_visited: bool = false;
-
-            for i in 0..num_successors {
-                let successors: &Vec<u32> = &self.successor_map[edge_id];
-                let succ_id: &u32 = successors
-                    .get(i as usize)
-                    .unwrap();
-
-                let virgin_status: u8 = self
-                    .virgin_bits[*succ_id as usize];
-                let current_status: u8 = self 
-                    .trace_bits[*succ_id as usize];
-
-                if virgin_status == 0xff && current_status == 0x00 {
-                    not_visited = true;
-                    break;
-                }
-            }
-            return not_visited;
-        }
-    }
-
-    /// Update global frontier nodes
-    pub fn update_global_frontier_nodes(&mut self, id: CorpusId) {
-        let mut updated_coverage_count: u32 = 0;
-        let mut init_count: u32 = 0;
-        let mut real_map_size: usize = 0;
-
-        // get number of covered frontier nodes from input
-        if true {
-            let input_ref: RefMut<'_, Testcase<I>>= self   
-                .corpus()
-                .get(id)
-                .unwrap()
-                .borrow_mut();
-            let input: &Testcase<I> = input_ref
-                .deref();
-    
-            init_count = input 
-                .covered_frontier_nodes_count()
-                .unwrap();
-
-            real_map_size = input 
-                .frontier_node_bitmap()
-                .unwrap()
-                .len();
-            assert!(real_map_size != 0);
-        }
-
-        let mut count: u32 = 0;
-        for i in 0..(real_map_size / 8) {
-            let mut current: u8 = 0;
-            if true {
-                let input_ref: RefMut<'_, Testcase<I>>= self   
-                    .corpus()
-                    .get(id)
-                    .unwrap()
-                    .borrow_mut();
-                current = input_ref 
-                    .deref()
-                    .frontier_node_bitmap()
-                    .unwrap()
-                    .get_ubyte(i);
-            }
-            if current == 0 {
-                continue;
-            }
-
-            for bit in 0 .. (8) {
-                let edge_id: usize = (i * 8) + bit;
-                assert!(edge_id >= (i * 8));
-                if (current & (1 << bit)) != 0 {
-                    assert!(edge_id < real_map_size);
-
-                    if !self.is_frontier_node_outer(edge_id) {
-                        count += 1;
-                        if self
-                            .global_frontier_bitmap
-                            .get(edge_id) {
-                            self 
-                                .global_frontier_bitmap
-                                .clear(edge_id);
-
-                            self.global_covered_frontier_nodes_count -= 1;
-                        }
-
-                        current = current & !(1 << bit);
-                    }
-                }
-            }
-
-            // frontier_node_bitmap[i] = current;
-            if true {
-                let mut input_ref: RefMut<'_, Testcase<I>>= self   
-                    .corpus()
-                    .get(id)
-                    .unwrap()
-                    .borrow_mut();
-                input_ref 
-                    .deref_mut()
-                    .frontier_node_bitmap_mut()
-                    .unwrap()
-                    .set_ubyte(i, current);
-            }
-            updated_coverage_count += popcount8(current) as u32;
-        }
-
-        // q->covered_frontier_nodes_count = updated_coverage_count;
-        if true {
-            let mut input_ref: RefMut<'_, Testcase<I>>= self   
-                .corpus()
-                .get(id)
-                .unwrap()
-                .borrow_mut();
-            let _res: Result<(), Error> = input_ref 
-                .deref_mut()
-                .set_covered_frontier_nodes_count(updated_coverage_count);
-        }
-        if self.global_covered_frontier_nodes_count == 0 {
-            println!("Seed id {}, initial count {}, count {}", id, init_count, count);
-            panic!("global_covered_frontier_nodes_count is 0");
-        }
-    }
-
-    /// Perform seed reduction.
-    pub fn setcover_reduction(&mut self) {
-        assert!(self.use_setcover_scheduling);
-        self.local_covered.clear_all();
-        if self.corpus().is_empty(){
-            panic!("No seeds in corpus");
-        }
-
-        let mut fast_seed_exist: bool = false;
-        let mut set_covered_seed_list: Vec<CorpusId> = vec![];
-        let mut set_covered_fast_seed_list: Vec<CorpusId> = vec![];
-
-        let mut unselected_seeds: Vec<CorpusId> = vec![];
-        let mut all_seeds: Vec<CorpusId> = vec![];
-
-        let mut unselected_seeds_count: u32 = 0;
-        self.covered_seed_list_counter = 0;
-        self.covered_fast_seed_list_counter = 0;
-
-        let mut total_exec_us: f64 = 0.0;
-        let mut total_exec_us_sq: f64 = 0.0;
-        let mut max_exec_us: f64 = 0.0;
-        
-        use core::ops::Deref;
-
-        for it in self.corpus().ids() {
-            all_seeds.push(it);
-        }
-
-        // compute execution time statistics,
-        // and count the number of seeds
-        for it in &all_seeds {
-            self.update_global_frontier_nodes(*it);
-
-            let input_ref: Ref<'_, Testcase<I>>  = self
-                .corpus()
-                .get(*it)
-                .unwrap()
-                .borrow();
-
-            let input: &Testcase<I> = input_ref.deref();
-
-            let mut exec_time_us: f64 = DEFAULT_EXEC_TIME_US;
-            let exec_time: &Option<Duration> = input.exec_time();
-            if exec_time != &None {
-                exec_time_us = exec_time
-                    .unwrap()
-                    .as_micros() as f64;
-            } else {
-                // use default value
-            }
-            
-            total_exec_us += exec_time_us;
-            total_exec_us_sq += exec_time_us * exec_time_us;
-            max_exec_us = max_exec_us.max(exec_time_us);
-
-            let covered_frontier_nodes_count = input 
-                .covered_frontier_nodes_count()
-                .unwrap();
-
-            if covered_frontier_nodes_count > 0 {
-                unselected_seeds_count += 1;
-                unselected_seeds.push(*it);
-            }
-        }
-        
-        // compute mean and standard deviation
-        let corpus_count_f: f64 = self.corpus().count() as f64;
-        let mean_exec_us: f64 = (total_exec_us - max_exec_us) / 
-                                (corpus_count_f - 1.0);
-        let stddev_exec_us_sq: f64 = total_exec_us_sq / corpus_count_f - mean_exec_us * mean_exec_us;
-        let stddev_exec_us: f64 = stddev_exec_us_sq.sqrt();
-
-        if unselected_seeds_count == 0 {
-            // randomly select one from all seeds.
-            let random_idx: usize = getrand64() % all_seeds.len();
-            let _ret: Result<(), Error> = self
-                .corpus_mut()
-                .set_favored_id(all_seeds[random_idx]);
-        } else {
-            assert_eq!(unselected_seeds_count, unselected_seeds.len() as u32);
-            
-            while unselected_seeds_count > 0 {
-                // randomly sample a seed.
-                let random_idx: usize = getrand64() % unselected_seeds.len();
-                let seed_index: CorpusId = all_seeds[random_idx];
-                let mut exec_time: f64 = DEFAULT_EXEC_TIME_US;
-
-                // compute execution time, use default value if not available.
-                if true {
-                    let seed_ref: Ref<'_, Testcase<I>> = self
-                        .corpus()
-                        .get(seed_index)
-                        .unwrap()
-                        .borrow();
-                    let reduction_seed: &Testcase<I> = seed_ref
-                        .deref();
-    
-                    let exec_time_opt: &Option<Duration> = reduction_seed
-                        .exec_time();
-                    if exec_time_opt != &None {
-                        exec_time = exec_time_opt
-                            .unwrap()
-                            .as_micros() as f64;
-                    }
-                }
-
-                // decrement size of unselected seeds,
-                // move the last element to the current position.
-                unselected_seeds_count -= 1;
-                unselected_seeds[random_idx] = unselected_seeds[unselected_seeds_count as usize];
-
-                let mut local_covered_intersection_num: u32 = 0;
-                // compute local_covered_intersection_num.
-                if true {
-                    let mut len: usize = 0;
-                    if true {
-                        let local_covered: &mut Bitmap = &mut self.local_covered;
-                        len = local_covered.len();
-                    }
-                    assert_ne!(len, 0);
-
-                    for j in 0..(len / 8) {
-                        let mut previous: u8 = 0;
-                        if true {
-                            previous = self
-                                .local_covered
-                                .get_ubyte(j);
-                        }
-
-                        let mut current: u8 = 0;
-
-                        if true {
-                            let seed_ref: Ref<'_, Testcase<I>> = self
-                                .corpus()
-                                .get(seed_index)
-                                .unwrap()
-                                .borrow();
-                            let reduction_seed: &Testcase<I> = seed_ref
-                                .deref();
-                            current = reduction_seed
-                                .frontier_node_bitmap()
-                                .unwrap()
-                                .get_ubyte(j);
-                        }
-
-                        if true {
-                            let local_covered: &mut Bitmap = &mut self.local_covered;
-                            local_covered.set_ubyte(j, previous | current);
-                            local_covered_intersection_num += popcount8(
-                                local_covered.get_ubyte(j) & (!previous)
-                            ) as u32;
-                        }
-                    }
-                }
-
-                if local_covered_intersection_num == 0 {
-                    continue;
-                }
-
-                // record in the seed list and fast seed list.
-                set_covered_seed_list.push(seed_index);
-                if exec_time < mean_exec_us + 1.0 * stddev_exec_us {
-                    fast_seed_exist = true;
-                    set_covered_fast_seed_list.push(seed_index);
-                }
-
-                // check whether all frontier nodes are covered.
-                let mut all_covered: bool = true;
-
-                if true {
-                    let local_covered: &mut Bitmap = &mut self.local_covered;
-                    for j in 0..local_covered.len() / 8 {
-                        let previous: u8 = local_covered
-                            .get_ubyte(j);
-                        let global : u8 = self
-                            .global_frontier_bitmap
-                            .get_ubyte(j);
-
-                        if (!previous) & global == 0 {
-                            all_covered = false;
-                            break;
-                        }
-                    }
-                }
-                
-                if all_covered {
-                    if fast_seed_exist {
-                        // randomly select one of the fast seed.
-                        let random_idx: usize = getrand64() % set_covered_fast_seed_list.len();
-                        let _ret: Result<(), Error> = self
-                            .corpus_mut()
-                            .set_favored_id(set_covered_fast_seed_list[random_idx]);
-                    } else {
-                        // randomly select one of the seed.
-                        let random_idx: usize = getrand64() % set_covered_seed_list.len();
-                        let _ret: Result<(), Error> = self
-                            .corpus_mut()
-                            .set_favored_id(set_covered_seed_list[random_idx]);
-                    }
-
-                    break;
-                }
-            }
-        }
-    }
-
-    /// Update bitmap score.
-    pub fn update_bitmap_score(&mut self, id: CorpusId) {
-        let trace_len: usize = self
-            .trace_bits 
-            .len();
-
-        for i in 0..trace_len {
-            if self.trace_bits[i] != 0 {
-                let edge_id: usize = i;
-
-                if self.is_frontier_node_inner(edge_id) {
-
-                    // update this edge.
-                    if true {
-                        let mut input_ref: RefMut<'_, Testcase<I>> = self
-                            .corpus()
-                            .get(id)
-                            .unwrap()
-                            .borrow_mut();
-
-                        let input: &mut Testcase<I> = input_ref 
-                            .deref_mut();
-
-                        let frontier_bitmap: &mut Bitmap = input
-                            .frontier_node_bitmap_mut()
-                            .unwrap();
-                        frontier_bitmap.set(edge_id);
-
-                        let nodes_count: u32 = input 
-                            .covered_frontier_nodes_count()
-                            .unwrap();
-                        let _res: Result<(), Error> =  input
-                            .set_covered_frontier_nodes_count(nodes_count + 1);
-                    }
-
-                    // update global frontier bitmap.
-                    if true {
-                        let global_frontier_bitmap: &mut Bitmap = &mut self.global_frontier_bitmap;
-                        if !global_frontier_bitmap.get(edge_id) {
-                            global_frontier_bitmap.set(edge_id);
-                            self.global_covered_frontier_nodes_count += 1;
-                        }
-                    }
-                }
-
-                self 
-                    .top_rated[i] = Some(id);
-                // FIXME: add a byte tracer for queue entry.
-                self.score_changed = true;
-            }
-        }
-    }
-
-    /// Go over top rated entries and sequentially grab 
-    /// winners for previously unseen bytes and marks
-    /// them as favored.
-    pub fn cull_queue(&mut self) {
-        self.setcover_reduction();
-    }
-
     /// Returns the map size.
     pub fn get_map_size() -> usize {
         return MAP_SIZE;
@@ -1732,15 +1285,448 @@ where
             global_frontier_updated: false,
             use_setcover_scheduling: false,
             score_changed: false,
-            successor_map: vec![], // init in load_cfg()
+            successor_map: vec![],   // init in load_cfg()
             successor_count: vec![], // init in load_cfg()
-            virgin_bits: vec![], // init in use_setcover_schedule()
-            trace_bits: vec![], // FIXME: init
+            virgin_bits: vec![],     // init in use_setcover_schedule()
+            trace_bits: vec![],      // FIXME: init
             top_rated: vec![None; MAP_SIZE],
         };
         feedback.init_state(&mut state)?;
         objective.init_state(&mut state)?;
         Ok(state)
+    }
+}
+
+impl<C, I, R, SC> HasSetCover for StdState<I, C, R, SC>
+where
+    I: Input,
+    C: Corpus<Input = <Self as UsesInput>::Input>,
+    R: Rand,
+    SC: Corpus<Input = <Self as UsesInput>::Input>,
+{
+    fn load_cfg(&mut self) {
+        self.successor_count = vec![0; MAP_SIZE];
+        for _i in 0..MAP_SIZE {
+            self.successor_map.push(vec![0; MAX_SUCCESSOR_COUNT]);
+        }
+
+        // load environment variable AFL_CFG_PATH
+        if let Ok(cfg_path) = std::env::var("AFL_CFG_PATH") {
+            let cfg_path: &Path = Path::new(&cfg_path);
+            if cfg_path.exists() {
+                use alloc::string::String;
+                use std::fs::File;
+                use std::io::BufReader;
+                let cfg_file: File = File::open(cfg_path).unwrap();
+                let mut src: usize;
+                let mut dst: usize;
+
+                let mut buffer: String = String::new();
+                let mut reader: BufReader<File> = BufReader::new(cfg_file);
+                // while (fscanf(cfg_file, "%u %u") == 2)
+                loop {
+                    buffer.clear();
+                    let ret: Result<usize, std::io::Error> = reader.read_line(&mut buffer);
+                    if ret.is_err() {
+                        break;
+                    }
+                    if buffer.is_empty() {
+                        break;
+                    }
+                    let v: Vec<&str> = buffer.split_whitespace().collect();
+                    if v.len() != 2 {
+                        panic!("invalid cfg file");
+                    }
+                    assert_eq!(v.len(), 2);
+                    src = v[0].parse::<usize>().unwrap();
+                    dst = v[1].parse::<usize>().unwrap();
+
+                    let cnt: usize = self.successor_count[src] as usize;
+                    self.successor_map[src][cnt] = dst as u32;
+                    self.successor_count[src] += 1;
+                }
+            } else {
+                panic!("AFL_CFG_PATH not exists");
+            }
+        } else {
+            panic!("AFL_CFG_PATH not set");
+        }
+    }
+
+    /// Change scheduling method to setcover.
+    fn use_setcover_schedule(&mut self) {
+        if self.use_setcover_scheduling {
+            return;
+        }
+        self.use_setcover_scheduling = true;
+        self.load_cfg();
+        self.virgin_bits = vec![0xff; MAP_SIZE];
+        self.trace_bits = vec![0x1; MAP_SIZE];
+    }
+
+    fn is_frontier_node_outer(&self, edge_id: usize) -> bool {
+        let num_successors: u32 = self.successor_count[edge_id];
+        if num_successors <= 1 {
+            return false;
+        } else {
+            let mut not_visited: bool = false;
+
+            for i in 0..num_successors {
+                let successors: &Vec<u32> = &self.successor_map[edge_id];
+                let succ_id: &u32 = successors
+                    .get(i as usize)
+                    .unwrap();
+
+                let succ_status = self
+                    .virgin_bits[*succ_id as usize];
+
+                if succ_status == 0xff {
+                    not_visited = true;
+                    break;
+                }
+            }
+            return not_visited;
+        }
+    }
+
+    fn is_frontier_node_inner(&self, edge_id: usize) -> bool {
+        let num_successors: u32 = self.successor_count[edge_id];
+        if num_successors <= 1 {
+            return false;
+        } else {
+            let mut not_visited: bool = false;
+
+            for i in 0..num_successors {
+                let successors: &Vec<u32> = &self.successor_map[edge_id];
+                let succ_id: &u32 = successors
+                    .get(i as usize)
+                    .unwrap();
+
+                let virgin_status: u8 = self.virgin_bits[*succ_id as usize];
+                let current_status: u8 = self.trace_bits[*succ_id as usize];
+
+                if virgin_status == 0xff && current_status == 0x00 {
+                    not_visited = true;
+                    break;
+                }
+            }
+            return not_visited;
+        }
+    }
+
+    /// Update global frontier nodes
+    fn update_global_frontier_nodes(&mut self, id: CorpusId) {
+        let mut updated_coverage_count: u32 = 0;
+        let mut init_count: u32 = 0;
+        let mut real_map_size: usize = 0;
+
+        // get number of covered frontier nodes from input
+        if true {
+            let input_ref: RefMut<'_, Testcase<I>> = self.corpus().get(id).unwrap().borrow_mut();
+            let input: &Testcase<I> = input_ref.deref();
+
+            init_count = input.covered_frontier_nodes_count().unwrap();
+
+            real_map_size = input.frontier_node_bitmap().unwrap().len();
+            assert!(real_map_size != 0);
+        }
+
+        let mut count: u32 = 0;
+        for i in 0..(real_map_size / 8) {
+            let mut current: u8 = 0;
+            if true {
+                let input_ref: RefMut<'_, Testcase<I>> =
+                    self.corpus().get(id).unwrap().borrow_mut();
+                current = input_ref
+                    .deref()
+                    .frontier_node_bitmap()
+                    .unwrap()
+                    .get_ubyte(i);
+            }
+            if current == 0 {
+                continue;
+            }
+
+            for bit in 0..(8) {
+                let edge_id: usize = (i * 8) + bit;
+                assert!(edge_id >= (i * 8));
+                if (current & (1 << bit)) != 0 {
+                    assert!(edge_id < real_map_size);
+
+                    if !self.is_frontier_node_outer(edge_id) {
+                        count += 1;
+                        if self.global_frontier_bitmap.get(edge_id) {
+                            self.global_frontier_bitmap.clear(edge_id);
+
+                            self.global_covered_frontier_nodes_count -= 1;
+                        }
+
+                        current = current & !(1 << bit);
+                    }
+                }
+            }
+
+            // frontier_node_bitmap[i] = current;
+            if true {
+                let mut input_ref: RefMut<'_, Testcase<I>> =
+                    self.corpus().get(id).unwrap().borrow_mut();
+                input_ref
+                    .deref_mut()
+                    .frontier_node_bitmap_mut()
+                    .unwrap()
+                    .set_ubyte(i, current);
+            }
+            updated_coverage_count += popcount8(current) as u32;
+        }
+
+        // q->covered_frontier_nodes_count = updated_coverage_count;
+        if true {
+            let mut input_ref: RefMut<'_, Testcase<I>> =
+                self.corpus().get(id).unwrap().borrow_mut();
+            let _res: Result<(), Error> = input_ref
+                .deref_mut()
+                .set_covered_frontier_nodes_count(updated_coverage_count);
+        }
+        if self.global_covered_frontier_nodes_count == 0 {
+            println!(
+                "Seed id {}, initial count {}, count {}",
+                id, init_count, count
+            );
+            panic!("global_covered_frontier_nodes_count is 0");
+        }
+    }
+
+    /// Perform seed reduction.
+    fn setcover_reduction(&mut self) {
+        assert!(self.use_setcover_scheduling);
+        self.local_covered.clear_all();
+        if self.corpus().is_empty() {
+            panic!("No seeds in corpus");
+        }
+
+        let mut fast_seed_exist: bool = false;
+        let mut set_covered_seed_list: Vec<CorpusId> = vec![];
+        let mut set_covered_fast_seed_list: Vec<CorpusId> = vec![];
+
+        let mut unselected_seeds: Vec<CorpusId> = vec![];
+        let mut all_seeds: Vec<CorpusId> = vec![];
+
+        let mut unselected_seeds_count: u32 = 0;
+        self.covered_seed_list_counter = 0;
+        self.covered_fast_seed_list_counter = 0;
+
+        let mut total_exec_us: f64 = 0.0;
+        let mut total_exec_us_sq: f64 = 0.0;
+        let mut max_exec_us: f64 = 0.0;
+
+        use core::ops::Deref;
+
+        for it in self.corpus().ids() {
+            all_seeds.push(it);
+        }
+
+        // compute execution time statistics,
+        // and count the number of seeds
+        for it in &all_seeds {
+            self.update_global_frontier_nodes(*it);
+
+            let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(*it).unwrap().borrow();
+
+            let input: &Testcase<I> = input_ref.deref();
+
+            let mut exec_time_us: f64 = DEFAULT_EXEC_TIME_US;
+            let exec_time: &Option<Duration> = input.exec_time();
+            if exec_time != &None {
+                exec_time_us = exec_time.unwrap().as_micros() as f64;
+            } else {
+                // use default value
+            }
+
+            total_exec_us += exec_time_us;
+            total_exec_us_sq += exec_time_us * exec_time_us;
+            max_exec_us = max_exec_us.max(exec_time_us);
+
+            let covered_frontier_nodes_count = input.covered_frontier_nodes_count().unwrap();
+
+            if covered_frontier_nodes_count > 0 {
+                unselected_seeds_count += 1;
+                unselected_seeds.push(*it);
+            }
+        }
+
+        // compute mean and standard deviation
+        let corpus_count_f: f64 = self.corpus().count() as f64;
+        let mean_exec_us: f64 = (total_exec_us - max_exec_us) / (corpus_count_f - 1.0);
+        let stddev_exec_us_sq: f64 =
+            total_exec_us_sq / corpus_count_f - mean_exec_us * mean_exec_us;
+        let stddev_exec_us: f64 = stddev_exec_us_sq.sqrt();
+
+        if unselected_seeds_count == 0 {
+            // randomly select one from all seeds.
+            let random_idx: usize = getrand64() % all_seeds.len();
+            let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(all_seeds[random_idx]);
+        } else {
+            assert_eq!(unselected_seeds_count, unselected_seeds.len() as u32);
+
+            while unselected_seeds_count > 0 {
+                // randomly sample a seed.
+                let random_idx: usize = getrand64() % unselected_seeds.len();
+                let seed_index: CorpusId = all_seeds[random_idx];
+                let mut exec_time: f64 = DEFAULT_EXEC_TIME_US;
+
+                // compute execution time, use default value if not available.
+                if true {
+                    let seed_ref: Ref<'_, Testcase<I>> =
+                        self.corpus().get(seed_index).unwrap().borrow();
+                    let reduction_seed: &Testcase<I> = seed_ref.deref();
+
+                    let exec_time_opt: &Option<Duration> = reduction_seed.exec_time();
+                    if exec_time_opt != &None {
+                        exec_time = exec_time_opt.unwrap().as_micros() as f64;
+                    }
+                }
+
+                // decrement size of unselected seeds,
+                // move the last element to the current position.
+                unselected_seeds_count -= 1;
+                unselected_seeds[random_idx] = unselected_seeds[unselected_seeds_count as usize];
+
+                let mut local_covered_intersection_num: u32 = 0;
+                // compute local_covered_intersection_num.
+                if true {
+                    let mut len: usize = 0;
+                    if true {
+                        let local_covered: &mut Bitmap = &mut self.local_covered;
+                        len = local_covered.len();
+                    }
+                    assert_ne!(len, 0);
+
+                    for j in 0..(len / 8) {
+                        let mut previous: u8 = 0;
+                        if true {
+                            previous = self.local_covered.get_ubyte(j);
+                        }
+
+                        let mut current: u8 = 0;
+
+                        if true {
+                            let seed_ref: Ref<'_, Testcase<I>> =
+                                self.corpus().get(seed_index).unwrap().borrow();
+                            let reduction_seed: &Testcase<I> = seed_ref.deref();
+                            current = reduction_seed.frontier_node_bitmap().unwrap().get_ubyte(j);
+                        }
+
+                        if true {
+                            let local_covered: &mut Bitmap = &mut self.local_covered;
+                            local_covered.set_ubyte(j, previous | current);
+                            local_covered_intersection_num +=
+                                popcount8(local_covered.get_ubyte(j) & (!previous)) as u32;
+                        }
+                    }
+                }
+
+                if local_covered_intersection_num == 0 {
+                    continue;
+                }
+
+                // record in the seed list and fast seed list.
+                set_covered_seed_list.push(seed_index);
+                if exec_time < mean_exec_us + 1.0 * stddev_exec_us {
+                    fast_seed_exist = true;
+                    set_covered_fast_seed_list.push(seed_index);
+                }
+
+                // check whether all frontier nodes are covered.
+                let mut all_covered: bool = true;
+
+                if true {
+                    let local_covered: &mut Bitmap = &mut self.local_covered;
+                    for j in 0..local_covered.len() / 8 {
+                        let previous: u8 = local_covered.get_ubyte(j);
+                        let global: u8 = self.global_frontier_bitmap.get_ubyte(j);
+
+                        if (!previous) & global == 0 {
+                            all_covered = false;
+                            break;
+                        }
+                    }
+                }
+
+                if all_covered {
+                    if fast_seed_exist {
+                        // randomly select one of the fast seed.
+                        let random_idx: usize = getrand64() % set_covered_fast_seed_list.len();
+                        let _ret: Result<(), Error> = self
+                            .corpus_mut()
+                            .set_favored_id(set_covered_fast_seed_list[random_idx]);
+                    } else {
+                        // randomly select one of the seed.
+                        let random_idx: usize = getrand64() % set_covered_seed_list.len();
+                        let _ret: Result<(), Error> = self
+                            .corpus_mut()
+                            .set_favored_id(set_covered_seed_list[random_idx]);
+                    }
+
+                    break;
+                }
+            }
+        }
+    }
+
+    /// Update bitmap score.
+    fn update_bitmap_score(&mut self, id: CorpusId) {
+        let trace_len: usize = self.trace_bits.len();
+
+        for i in 0..trace_len {
+            if self.trace_bits[i] != 0 {
+                let edge_id: usize = i;
+
+                if self.is_frontier_node_inner(edge_id) {
+                    // update this edge.
+                    if true {
+                        let mut input_ref: RefMut<'_, Testcase<I>> = self
+                            .corpus()
+                            .get(id)
+                            .unwrap()
+                            .borrow_mut();
+
+                        let input: &mut Testcase<I> = input_ref
+                            .deref_mut();
+
+                        let frontier_bitmap: &mut Bitmap = input
+                                .frontier_node_bitmap_mut()
+                                .unwrap();
+                        frontier_bitmap
+                            .set(edge_id);
+
+                        let nodes_count: u32 = input
+                            .covered_frontier_nodes_count()
+                            .unwrap();
+                        let _res: Result<(), Error> = input
+                                .set_covered_frontier_nodes_count(nodes_count + 1);
+                    }
+
+                    // update global frontier bitmap.
+                    if true {
+                        let global_frontier_bitmap: &mut Bitmap = &mut self.global_frontier_bitmap;
+                        if !global_frontier_bitmap.get(edge_id) {
+                            global_frontier_bitmap.set(edge_id);
+                            self.global_covered_frontier_nodes_count += 1;
+                        }
+                    }
+                }
+
+                self.top_rated[i] = Some(id);
+                self.score_changed = true;
+            }
+        }
+    }
+
+    /// Go over top rated entries and sequentially grab
+    /// winners for previously unseen bytes and marks
+    /// them as favored.
+    fn cull_queue(&mut self) {
+        self.setcover_reduction();
     }
 }
 
@@ -1944,25 +1930,25 @@ mod test {
     #[test]
     fn test_load_cfg() {
         // create a fake cfg file.
+        use crate::state::HasSetCover;
         use std::io::Write;
+
         use crate::state::MAP_SIZE;
         let fname: &str = "/tmp/tmp_cfg";
-        let mut fobj: std::fs::File = std::fs::File::create(fname)
-            .unwrap();
+        let mut fobj: std::fs::File = std::fs::File::create(fname).unwrap();
         let _ = fobj.write_all(b"0 1\n");
         let _ = fobj.write_all(b"6  5\n");
         let _ = fobj.sync_all();
 
         // check that the loadcfg works
         let mut state: StdState<BytesInput, _, _, _> =
-            StdState::nop::<BytesInput>()
-            .expect("couldn't instantiate the test state");
+            StdState::nop::<BytesInput>().expect("couldn't instantiate the test state");
         assert_eq!(state.global_frontier_bitmap.len(), MAP_SIZE);
         assert_eq!(state.initial_frontier_bitmap.len(), MAP_SIZE);
         assert_eq!(state.local_covered.len(), MAP_SIZE);
 
         let key: &str = "AFL_CFG_PATH";
-        let old_cfg_path = std::env::var(key); 
+        let old_cfg_path = std::env::var(key);
         std::env::set_var(key, fname);
 
         state.use_setcover_schedule();
@@ -1981,7 +1967,6 @@ mod test {
         }
 
         // remove the temporay file.
-        std::fs::remove_file(fname)
-            .unwrap();
+        std::fs::remove_file(fname).unwrap();
     }
 }
