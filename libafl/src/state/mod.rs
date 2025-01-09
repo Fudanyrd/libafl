@@ -313,8 +313,6 @@ pub struct StdState<I, C, R, SC> {
     global_frontier_bitmap: Bitmap,
     initial_frontier_bitmap: Bitmap,
     local_covered: Bitmap,
-    recent_frontier_nodes: Vec<u32>,
-    frontier_discovery_time: Vec<u32>,
     recent_frontier_count: u32,
     global_covered_frontier_nodes_count: u32,
     covered_seed_list_counter: u32,
@@ -332,6 +330,9 @@ pub struct StdState<I, C, R, SC> {
     trace_bits: Vec<u8>,
     /// Top entries for bitmap bytes
     top_rated: Vec<Option<CorpusId> >,
+    // FIXME: These are probably unused.
+    // recent_frontier_nodes: Vec<u32>,
+    // frontier_discovery_time: Vec<u32>,
 }
 
 impl<I, C, R, SC> UsesInput for StdState<I, C, R, SC>
@@ -1250,8 +1251,7 @@ where
         }
         self.use_setcover_scheduling = true;
         self.load_cfg();
-
-        // FIXME: initialize bitmaps here.
+        self.virgin_bits = vec![0xff; MAP_SIZE];
     }
 
     fn is_frontier_node_outer(&self, edge_id: usize) -> bool {
@@ -1617,7 +1617,7 @@ where
 
     /// Update bitmap score.
     pub fn update_bitmap_score(&mut self, id: CorpusId) {
-        let trace_len = self
+        let trace_len: usize = self
             .trace_bits 
             .len();
 
@@ -1668,6 +1668,18 @@ where
         }
     }
 
+    /// Go over top rated entries and sequentially grab 
+    /// winners for previously unseen bytes and marks
+    /// them as favored.
+    pub fn cull_queue(&mut self) {
+        self.setcover_reduction();
+    }
+
+    /// Returns the map size.
+    pub fn get_map_size() -> usize {
+        return MAP_SIZE;
+    }
+
     /// Creates a new `State`, taking ownership of all of the individual components during fuzzing.
     pub fn new<F, O>(
         rand: R,
@@ -1711,8 +1723,6 @@ where
             global_frontier_bitmap: Bitmap::new(MAP_SIZE),
             initial_frontier_bitmap: Bitmap::new(MAP_SIZE),
             local_covered: Bitmap::new(MAP_SIZE),
-            recent_frontier_nodes: vec![],
-            frontier_discovery_time: vec![],
             recent_frontier_count: 0,
             global_covered_frontier_nodes_count: 0,
             covered_fast_seed_list_counter: 0,
@@ -1722,10 +1732,10 @@ where
             global_frontier_updated: false,
             use_setcover_scheduling: false,
             score_changed: false,
-            successor_map: vec![],
-            successor_count: vec![],
-            virgin_bits: vec![],
-            trace_bits: vec![],
+            successor_map: vec![], // init in load_cfg()
+            successor_count: vec![], // init in load_cfg()
+            virgin_bits: vec![], // init in use_setcover_schedule()
+            trace_bits: vec![], // FIXME: init
             top_rated: vec![None; MAP_SIZE],
         };
         feedback.init_state(&mut state)?;
@@ -1956,6 +1966,8 @@ mod test {
         std::env::set_var(key, fname);
 
         state.use_setcover_schedule();
+        assert!(state.use_setcover_scheduling);
+        assert!(state.virgin_bits.len() == MAP_SIZE);
         assert_eq!(state.successor_count[0], 1);
         assert_eq!(state.successor_count[6], 1);
         assert_eq!(state.successor_map[0][0], 1);
