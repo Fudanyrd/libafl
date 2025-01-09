@@ -1,5 +1,6 @@
 //! The setcover scheduler.
 
+use core::ops::DerefMut;
 use std::borrow::ToOwned;
 
 use libafl_bolts::ErrorBacktrace;
@@ -32,12 +33,33 @@ impl<I, S> Scheduler<I, S> for SetcoverScheduler
 where
     S: HasCorpus
 {
-    fn on_add(&mut self, _state: &mut S, _id: CorpusId) -> Result<(), Error> {
-        Err(Error::NotImplemented(
-            "SetcoverScheduler::on_add is not implemented"
-                .to_owned(),
-            ErrorBacktrace::new(),
-        ))
+    fn on_add(&mut self, state: &mut S, id: CorpusId) -> Result<(), Error> {
+        // Set parent id
+        let current_id: Option<CorpusId> = *state
+            .corpus()
+            .current();
+
+        let mut input_ref: core::cell::RefMut<'_, crate::corpus::Testcase<<<S as HasCorpus>::Corpus as Corpus>::Input>> = state 
+            .corpus()
+            .get(id)
+            .unwrap()
+            .borrow_mut();
+
+        let input = input_ref 
+            .deref_mut();
+
+        match input.use_setcover_schedule() {
+            Ok(()) => {
+            }
+            Err(_) => {
+                return Err(Error::empty(
+                    "Input already has a setcover schedule."
+                        .to_owned(),
+                ));
+            }
+        }
+        input.set_parent_id_optional(current_id);
+        return Ok(());
     }
 
     fn next(&mut self, state: &mut S) -> Result<CorpusId, Error> {
