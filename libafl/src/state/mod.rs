@@ -253,7 +253,7 @@ pub trait HasSetCover {
     fn is_frontier_node_outer(&self, edge_id: usize) -> bool;
 
     /// Check if the edge is a frontier node.
-    fn is_frontier_node_inner(&self, edge_id: usize) -> bool;
+    fn is_frontier_node_inner(&self, trace_bits: &Vec<u8>, edge_id: usize) -> bool;
 
     /// Update global frontier nodes.
     fn update_global_frontier_nodes(&mut self, id: CorpusId);
@@ -262,7 +262,7 @@ pub trait HasSetCover {
     fn setcover_reduction(&mut self);
 
     /// Update bitmap score.
-    fn update_bitmap_score(&mut self, id: CorpusId);
+    fn update_bitmap_score(&mut self, trace_bits: Vec<u8>, id: CorpusId);
 
     /// Go over top rated entries and sequentially grab
     /// winners for previously unseen bytes and marks
@@ -364,7 +364,6 @@ pub struct StdState<I, C, R, SC> {
     successor_map: Vec<Vec<u32>>,
     successor_count: Vec<u32>,
     virgin_bits: Vec<u8>,
-    trace_bits: Vec<u8>,
     /// Top entries for bitmap bytes
     top_rated: Vec<Option<CorpusId>>,
     // FIXME: These are probably unused.
@@ -1288,7 +1287,6 @@ where
             successor_map: vec![],   // init in load_cfg()
             successor_count: vec![], // init in load_cfg()
             virgin_bits: vec![],     // init in use_setcover_schedule()
-            trace_bits: vec![],      // FIXME: init
             top_rated: vec![None; MAP_SIZE],
         };
         feedback.init_state(&mut state)?;
@@ -1361,7 +1359,6 @@ where
         self.use_setcover_scheduling = true;
         self.load_cfg();
         self.virgin_bits = vec![0xff; MAP_SIZE];
-        self.trace_bits = vec![0x1; MAP_SIZE];
     }
 
     fn is_frontier_node_outer(&self, edge_id: usize) -> bool {
@@ -1389,7 +1386,7 @@ where
         }
     }
 
-    fn is_frontier_node_inner(&self, edge_id: usize) -> bool {
+    fn is_frontier_node_inner(&self, trace_bits: &Vec<u8>, edge_id: usize) -> bool {
         let num_successors: u32 = self.successor_count[edge_id];
         if num_successors <= 1 {
             return false;
@@ -1403,7 +1400,7 @@ where
                     .unwrap();
 
                 let virgin_status: u8 = self.virgin_bits[*succ_id as usize];
-                let current_status: u8 = self.trace_bits[*succ_id as usize];
+                let current_status: u8 = trace_bits[*succ_id as usize];
 
                 if virgin_status == 0xff && current_status == 0x00 {
                     not_visited = true;
@@ -1674,14 +1671,15 @@ where
     }
 
     /// Update bitmap score.
-    fn update_bitmap_score(&mut self, id: CorpusId) {
-        let trace_len: usize = self.trace_bits.len();
+    fn update_bitmap_score(&mut self, trace_bits: Vec<u8>, id: CorpusId) {
+        let trace_len: usize = trace_bits.len();
 
         for i in 0..trace_len {
-            if self.trace_bits[i] != 0 {
+            let bit: u8 = trace_bits[i];
+            if bit != 0 {
                 let edge_id: usize = i;
 
-                if self.is_frontier_node_inner(edge_id) {
+                if self.is_frontier_node_inner(&trace_bits, edge_id) {
                     // update this edge.
                     if true {
                         let mut input_ref: RefMut<'_, Testcase<I>> = self

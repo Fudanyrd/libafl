@@ -4,10 +4,7 @@ use core::ops::DerefMut;
 use std::borrow::ToOwned;
 
 use crate::{
-    corpus::{Corpus, CorpusId},
-    schedulers::{RemovableScheduler, Scheduler},
-    state::{HasCorpus, HasSetCover},
-    Error,
+    corpus::{Corpus, CorpusId}, observers::MapObserver, schedulers::{RemovableScheduler, Scheduler}, state::{HasCorpus, HasSetCover}, Error
 };
 use libafl_bolts::ErrorBacktrace;
 
@@ -15,23 +12,32 @@ use super::HasQueueCycles;
 
 /// The setcover scheduler.
 #[derive(Debug, Clone)]
-pub struct SetcoverScheduler {
+pub struct SetcoverScheduler<O> {
     // The number of cycles fuzzed.
     num_cycles: u64,
+    // The observer.
+    observer: Option<O>,
 }
 
-impl<I, S> RemovableScheduler<I, S> for SetcoverScheduler {}
+impl<I, S, O> RemovableScheduler<I, S> for SetcoverScheduler<O> {}
 
-impl SetcoverScheduler {
+impl<O> SetcoverScheduler<O> 
+where 
+    O: MapObserver<Entry = u8> + Clone,
+{
     /// Creates a new [`SetcoverScheduler`].
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(observer: O) -> Self {
+        Self {
+            num_cycles: 0,
+            observer: Some(observer),
+        }
     }
 }
 
-impl<I, S> Scheduler<I, S> for SetcoverScheduler
+impl<I, S, O> Scheduler<I, S> for SetcoverScheduler<O>
 where
     S: HasCorpus + HasSetCover,
+    O: MapObserver<Entry = u8> + Clone,
 {
     fn on_add(&mut self, state: &mut S, id: CorpusId) -> Result<(), Error> {
         // Set parent id
@@ -64,7 +70,9 @@ where
         // when we bump into a new path, we call update_bitmap_score()
         // to see if the path appears more favorable than existing ones.
         if true {
-            state.update_bitmap_score(id);
+            state.update_bitmap_score(
+                <Option<O> as Clone>::clone(&self.observer).unwrap().to_vec(), 
+                id);
         }
         return Ok(());
     }
@@ -118,14 +126,20 @@ where
     }
 }
 
-impl HasQueueCycles for SetcoverScheduler {
+impl<O> HasQueueCycles for SetcoverScheduler<O> {
     fn queue_cycles(&self) -> u64 {
         return self.num_cycles;
     }
 }
 
-impl Default for SetcoverScheduler {
+impl<O> Default for SetcoverScheduler<O> 
+where 
+    O: MapObserver<Entry = u8> + Clone,
+{
     fn default() -> Self {
-        Self { num_cycles: 0 }
+        Self {
+            num_cycles: 0,
+            observer: None,
+        }
     }
 }
