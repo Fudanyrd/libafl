@@ -16,7 +16,7 @@ pub struct SetcoverScheduler<O> {
     // The number of cycles fuzzed.
     num_cycles: u64,
     // The observer.
-    observer: Option<O>,
+    observer: *const O,
 }
 
 impl<I, S, O> RemovableScheduler<I, S> for SetcoverScheduler<O> {}
@@ -26,10 +26,10 @@ where
     O: MapObserver<Entry = u8> + Clone,
 {
     /// Creates a new [`SetcoverScheduler`].
-    pub fn new(observer: O) -> Self {
+    pub fn new(observer: &O) -> Self {
         Self {
             num_cycles: 0,
-            observer: Some(observer),
+            observer: observer,
         }
     }
 }
@@ -71,22 +71,23 @@ where
         // to see if the path appears more favorable than existing ones.
         if true {
             state.update_bitmap_score(
-                <Option<O> as Clone>::clone(&self.observer).unwrap().to_vec(), 
+                unsafe { self.observer.as_ref().unwrap().to_vec() },
                 id);
         }
         return Ok(());
     }
 
     fn next(&mut self, state: &mut S) -> Result<CorpusId, Error> {
+        self.num_cycles += 1;
         if state.corpus().count() == 0 {
             return Err(Error::empty(
                 "No entries in corpus. This often implies the target is not properly instrumented."
                     .to_owned(),
             ));
         } else {
-            self.num_cycles += 1;
 
             // select next seed.
+            println!("cull queue");
             state.cull_queue();
 
             // try to get the favored id.
@@ -139,7 +140,7 @@ where
     fn default() -> Self {
         Self {
             num_cycles: 0,
-            observer: None,
+            observer: std::ptr::null(), // nullptr
         }
     }
 }

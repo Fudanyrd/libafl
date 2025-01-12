@@ -115,7 +115,7 @@ impl Default for Bitmap {
     }
 }
 
-/// Open /dev/random and read 8 bytes
+/// Open /dev/random and read 8 bytes to fill a 64-bit random number.
 pub fn getrand64() -> usize {
     // open /dev/random
     let mut fobj: File = File::open("/dev/random").unwrap();

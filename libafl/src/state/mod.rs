@@ -720,6 +720,7 @@ where
         loop {
             if let Some(path) = self.remaining_initial_files.as_mut().and_then(Vec::pop) {
                 let filename = path.file_name().unwrap().to_string_lossy();
+                println!("Loading initial input: {filename}");
                 if filename.starts_with('.')
                 // || filename
                 //     .rsplit_once('-')
@@ -1358,6 +1359,8 @@ where
         }
         self.use_setcover_scheduling = true;
         self.load_cfg();
+        assert!(self.successor_count.len() > 0);
+        assert!(self.successor_map.len() > 0);
         self.virgin_bits = vec![0xff; MAP_SIZE];
     }
 
