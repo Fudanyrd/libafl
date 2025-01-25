@@ -22,7 +22,7 @@ use libafl::{
         token_mutations::Tokens,
     },
     observers::{CanTrack, HitcountsMapObserver, TimeObserver},
-    schedulers::{IndexesLenTimeMinimizerScheduler, SetcoverScheduler},
+    schedulers::{IndexesLenTimeMinimizerScheduler, SetcoverScheduler, QueueScheduler},
     stages::mutational::StdMutationalStage,
     state::{HasCorpus, HasSetCover, StdState},
     Error, HasMetadata,
@@ -195,7 +195,7 @@ pub extern "C" fn libafl_main() {
         if state.metadata_map().get::<Tokens>().is_none() {
             // tl; dr
             state.add_metadata(Tokens::from([
-                // a sample object file
+                // hexdump of a very simple object file
                 vec![0x7f, 0x45, 0x4c, 0x46, 0x02, 0x01, 0x01, 0x00],
                 vec![0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00],
                 vec![0x01, 0x00, 0x3e, 0x00, 0x01, 0x00, 0x00, 0x00],
@@ -319,11 +319,9 @@ pub extern "C" fn libafl_main() {
         let mutator = StdScheduledMutator::new(havoc_mutations().merge(tokens_mutations()));
         let mut stages = tuple_list!(StdMutationalStage::new(mutator));
 
-        // A setcover scheduler instance.
-        let mut setcover_sched = SetcoverScheduler::new(edges_observer.as_ref());
-
         // A minimization+queue policy to get testcasess from the corpus
-        let scheduler = IndexesLenTimeMinimizerScheduler::new(&edges_observer, setcover_sched);
+        let scheduler =
+            IndexesLenTimeMinimizerScheduler::new(&edges_observer, QueueScheduler::new());
 
         // A fuzzer with feedbacks and a corpus scheduler
         let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
@@ -368,19 +366,10 @@ pub extern "C" fn libafl_main() {
 
         // In case the corpus is empty (on first run), reset
         if state.must_load_initial_inputs() {
-            state.use_setcover_schedule();
             state
-                .load_initial_inputs_forced(
-                    &mut fuzzer,
-                    &mut executor,
-                    &mut restarting_mgr,
-                    &opt.input,
-                )
+                .load_initial_inputs(&mut fuzzer, &mut executor, &mut restarting_mgr, &opt.input)
                 .unwrap_or_else(|_| panic!("Failed to load initial corpus at {:?}", &opt.input));
             println!("We imported {} inputs from disk.", state.corpus().count());
-
-            let count = state.corpus().count();
-            assert!(count > 0);
         }
 
         fuzzer.fuzz_loop(&mut stages, &mut executor, &mut state, &mut restarting_mgr)?;

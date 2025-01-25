@@ -4,6 +4,8 @@ FUZZER_NAME = 'fuzzer_binutils'
 CARGO_TARGET_DIR = { value = "${PROJECT_DIR}/target", condition = { env_not_set = [
 	"CARGO_TARGET_DIR"
 ] } }
+BINUTILS_VERSION = "-2.34"
+BINUTILS = "binutils${BINUTILS_VERSION}"
 
 PROFILE = { value = "release", condition = { env_not_set = ["PROFILE"] } }
 PROFILE_DIR = { source = "${PROFILE}", default_value = "release", mapping = { "release" = "release", "dev" = "debug" }, condition = { env_not_set = [
@@ -29,17 +31,17 @@ mac_alias = "binutils_mac"
 windows_alias = "binutils_windows"
 
 [tasks.binutils_archive]
-condition = { files_not_exist = ["./binutils-2.34.tar.gz"] }
+condition = { files_not_exist = ["./${BINUTILS}.tar.gz"] }
 script_runner = "@shell"
 script = '''
-wget https://ftp.gnu.org/gnu/binutils/binutils-2.34.tar.gz
+wget https://ftp.gnu.org/gnu/binutils/${BINUTILS}.tar.gz
 '''
 
 [tasks.binutils_unix]
-condition = { files_not_exist = ["./binutils-2.34"] }
+condition = { files_not_exist = ["${PROJECT_DIR}/${BINUTILS}"] }
 script_runner = "@shell"
 script = '''
-tar -xvf binutils-2.34.tar.gz > /dev/null
+tar -xvf ${BINUTILS}.tar.gz > /dev/null
 '''
 dependencies = ["binutils_archive"]
 
@@ -68,14 +70,22 @@ linux_alias = "lib_unix"
 mac_alias = "lib_unix"
 windows_alias = "unsupported"
 
+[tasks.lib_configure]
+condition = { files_not_exist = ["${PROJECT_DIR}/${BINUTILS}/Makefile"] }
+script_runner = "@shell"
+script = '''
+cd "${PROJECT_DIR}"
+cp ./readelf-harness.c ./${BINUTILS}/binutils/readelf-harness.c
+cd ${BINUTILS} && LD=/usr/bin/ld AR="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_ar" CC="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cc" CXX="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cxx" ./configure --enable-shared=no --with-pic=yes --enable-gold=no --enable-ld=no --disable-lto --enable-stage1-languages=all
+'''
+
 [tasks.lib_unix]
 script_runner = "@shell"
 script = '''
-cd binutils-2.34 && CC="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cc" CXX="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cxx" ./configure --enable-shared=no --with-pic=yes --enable-gold=no --enable-ld=no --disable-lto --enable-stage1-languages=all
-cd "${PROJECT_DIR}"
-make -C binutils-2.34 CC="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cc" CXX="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cxx" LIBTOOL=${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_libtool
+cd ${PROJECT_DIR}/${BINUTILS}
+make -j8 -C ${PROJECT_DIR}/${BINUTILS} AR="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_ar" CC="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cc" CXX="${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cxx" LIBTOOL=${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_libtool
 '''
-dependencies = ["binutils", "cxx", "cc"]
+dependencies = ["binutils", "cxx", "cc", "lib_configure"]
 
 # Harness
 [tasks.fuzzer]
@@ -84,12 +94,13 @@ mac_alias = "unsupported"
 windows_alias = "unsupported"
 
 [tasks.fuzzer_unix]
-command = "${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cxx"
-args = [
-	"FIXME",
-	"-o",
-	"${FUZZER_NAME}",
-]
+condition = { files_not_exist = ["${CARGO_TARGET_DIR}/${PROFILE}/${FUZZER_NAME}.coverage_asan"] }
+script_runner = "@shell"
+script = '''
+cd ${CARGO_MAKE_WORKING_DIRECTORY}/${BINUTILS}/binutils;
+${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cc -DHAVE_CONFIG_H -I.  -I. -I. -I../bfd -I./../bfd -I./../include -DLOCALEDIR="\"/usr/local/share/locale\"" -Dbin_dummy_emulation=bin_vanilla_emulation  -W -Wall -Wstrict-prototypes -Wmissing-prototypes -Wshadow -I./../zlib -g -O2 -MT readelf-harness.o -MD -MP -c -o readelf-harness.o readelf-harness.c;
+/bin/bash ./libtool  --tag=CC   --mode=link ${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cc -W -Wall -Wstrict-prototypes -Wmissing-prototypes -Wshadow -I./../zlib -g -O2   -o ${FUZZER} readelf-harness.o version.o unwind-ia64.o dwarf.o elfcomm.o  ../libctf/libctf-nobfd.la ../libiberty/libiberty.a -L./../zlib -lz;
+'''
 dependencies = ["lib", "cxx", "cc"]
 
 # Run the fuzzer
@@ -98,10 +109,11 @@ linux_alias = "run_unix"
 mac_alias = "unsupported"
 windows_alias = "unsupported"
 
+# FIXME: choice of broker port
 [tasks.run_unix]
 script_runner = "@shell"
 script = '''
-./${FUZZER_NAME}.coverage_asan --broker-port 21337 --cores 0 --input ./corpus
+${CARGO_TARGET_DIR}/${PROFILE}/${FUZZER_NAME}.coverage_asan --broker-port 21337 --cores 0 --input ${PROJECT_DIR}/corpus
 '''
 dependencies = ["fuzzer"]
 
@@ -117,6 +129,6 @@ clear = true
 script_runner = "@shell"
 script = '''
 rm -f ./${FUZZER_NAME}
-make -C binutils-2.34 clean
+make -C ${BINUTILS} clean -i
 cargo clean
 '''
