@@ -1422,10 +1422,16 @@ where
 
         // get number of covered frontier nodes from input
         if true {
-            let input_ref: RefMut<'_, Testcase<I>> = self.corpus().get(id).unwrap().borrow_mut();
+            let input_ref: RefMut<'_, Testcase<I>> = self
+                .corpus()
+                .get(id)
+                .unwrap()
+                .borrow_mut();
             let input: &Testcase<I> = input_ref.deref();
 
-            init_count = input.covered_frontier_nodes_count().unwrap();
+            init_count = input
+                .covered_frontier_nodes_count()
+                .unwrap();
 
             real_map_size = input.frontier_node_bitmap().unwrap().len();
             assert!(real_map_size != 0);
@@ -1528,7 +1534,7 @@ where
         // compute execution time statistics,
         // and count the number of seeds
         for it in &all_seeds {
-            self.update_global_frontier_nodes(*it);
+            // self.update_global_frontier_nodes(*it);
 
             let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(*it).unwrap().borrow();
 
