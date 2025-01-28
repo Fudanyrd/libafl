@@ -186,3 +186,35 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t *data, size_t size) {
   PNG_CLEANUP
   return 0;
 }
+
+#ifdef STAND_ALONE
+
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+
+int main(int argc, char **argv) {
+  if (argc != 2) {
+    fprintf(stderr, "Usage: %s <png_file>\n", argv[0]);
+    return 1;
+  }
+
+  // mmap the file in argv[1].
+  int fd = open(argv[1], O_RDONLY);
+  void *addr = mmap(nullptr, lseek(fd, 0, SEEK_END), PROT_READ, MAP_PRIVATE, fd, 0);
+  if (addr == MAP_FAILED) {
+    fprintf(stderr, "mmap failed\n");
+    _exit(1);
+  }
+
+  off_t len = lseek(fd, 0, SEEK_END);
+  if (len <= 0) {
+    fprintf(stderr, "lseek failed\n");
+    _exit(1);
+  }
+  close(fd);
+
+  return LLVMFuzzerTestOneInput(static_cast<const uint8_t *>(addr), len);
+}
+
+#endif // STAND_ALONE

@@ -3,9 +3,10 @@
 //! In this example, you will see the use of the `launcher` feature.
 //! The `launcher` will spawn new processes for each cpu core.
 use core::time::Duration;
-use std::{env, net::SocketAddr, path::PathBuf};
+use std::{env, net::SocketAddr, path::PathBuf, fs::File};
 
 use clap::{self, Parser};
+use libafl::observers::ExplicitTracking;
 use libafl::{
     corpus::{Corpus, InMemoryCorpus, OnDiskCorpus},
     events::{launcher::Launcher, EventConfig},
@@ -14,16 +15,16 @@ use libafl::{
     feedbacks::{CrashFeedback, MaxMapFeedback, TimeFeedback, TimeoutFeedback},
     fuzzer::{Fuzzer, StdFuzzer},
     inputs::{BytesInput, HasTargetBytes},
-    monitors::{MultiMonitor, OnDiskTomlMonitor},
+    monitors::{MultiMonitor, OnDiskTomlMonitor, OnDiskCSVMonitor},
     mutators::{
         havoc_mutations::havoc_mutations,
         scheduled::{tokens_mutations, StdScheduledMutator},
         token_mutations::Tokens,
     },
     observers::{CanTrack, HitcountsMapObserver, TimeObserver},
-    schedulers::{IndexesLenTimeMinimizerScheduler, QueueScheduler},
+    schedulers::{IndexesLenTimeMinimizerScheduler, SetcoverScheduler},
     stages::mutational::StdMutationalStage,
-    state::{HasCorpus, StdState},
+    state::{HasCorpus, HasSetCover, StdState},
     Error, HasMetadata,
 };
 use libafl_bolts::{
@@ -129,6 +130,7 @@ pub extern "C" fn libafl_main() {
     // Needed only on no_std
     // unsafe { RegistryBuilder::register::<Tokens>(); }
     let opt = Opt::parse();
+    println!("Entry point");
 
     let broker_port = opt.broker_port;
     let cores = opt.cores;
@@ -140,18 +142,23 @@ pub extern "C" fn libafl_main() {
 
     let shmem_provider = StdShMemProvider::new().expect("Failed to init shared memory");
 
-    let monitor = OnDiskTomlMonitor::new(
-        "./fuzzer_stats.toml",
+    let mut fobj = File::create("./fuzzer_stats.csv")
+        .expect("Failed to create fuzzer_stats.toml");
+    let monitor = OnDiskCSVMonitor::new(
+        &mut fobj,
         MultiMonitor::new(|s| println!("{s}")),
     );
+    println!("monitor");
 
     let mut run_client = |state: Option<_>, mut restarting_mgr, _client_description| {
+        println!("run_client");
         // Create an observation channel using the coverage map
-        let edges_observer =
+        let edges_observer: ExplicitTracking<_, true, false> =
             HitcountsMapObserver::new(unsafe { std_edges_map_observer("edges") }).track_indices();
 
         // Create an observation channel to keep track of the execution time
         let time_observer = TimeObserver::new("time");
+        println!("Making a new observer");
 
         // Feedback to rate the interestingness of an input
         // This one is composed by two Feedbacks in OR
@@ -171,7 +178,7 @@ pub extern "C" fn libafl_main() {
                 // RNG
                 StdRand::new(),
                 // Corpus that will be evolved, we keep it in memory for performance
-                InMemoryCorpus::new(),
+                OnDiskCorpus::new(&opt.output).unwrap(),
                 // Corpus in which we store solutions (crashes in this example),
                 // on disk so the user can get them after stopping the fuzzer
                 OnDiskCorpus::new(&opt.output).unwrap(),
@@ -201,9 +208,11 @@ pub extern "C" fn libafl_main() {
         let mutator = StdScheduledMutator::new(havoc_mutations().merge(tokens_mutations()));
         let mut stages = tuple_list!(StdMutationalStage::new(mutator));
 
+        // A setcover scheduler instance.
+        let mut setcover_sched = SetcoverScheduler::new(edges_observer.as_ref());
+
         // A minimization+queue policy to get testcasess from the corpus
-        let scheduler =
-            IndexesLenTimeMinimizerScheduler::new(&edges_observer, QueueScheduler::new());
+        let scheduler = IndexesLenTimeMinimizerScheduler::new(&edges_observer, setcover_sched);
 
         // A fuzzer with feedbacks and a corpus scheduler
         let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
@@ -248,10 +257,19 @@ pub extern "C" fn libafl_main() {
 
         // In case the corpus is empty (on first run), reset
         if state.must_load_initial_inputs() {
+            state.use_setcover_schedule();
             state
-                .load_initial_inputs(&mut fuzzer, &mut executor, &mut restarting_mgr, &opt.input)
+                .load_initial_inputs_forced(
+                    &mut fuzzer,
+                    &mut executor,
+                    &mut restarting_mgr,
+                    &opt.input,
+                )
                 .unwrap_or_else(|_| panic!("Failed to load initial corpus at {:?}", &opt.input));
             println!("We imported {} inputs from disk.", state.corpus().count());
+
+            let count = state.corpus().count();
+            assert!(count > 0);
         }
 
         fuzzer.fuzz_loop(&mut stages, &mut executor, &mut state, &mut restarting_mgr)?;
