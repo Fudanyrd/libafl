@@ -312,6 +312,8 @@ impl<I> TestcaseStorage<I> {
 pub struct InMemoryCorpus<I> {
     storage: TestcaseStorage<I>,
     current: Option<CorpusId>,
+    /// Favored Id
+    favored_id: Option<CorpusId>,
 }
 
 impl<I> Corpus for InMemoryCorpus<I> {
@@ -452,6 +454,15 @@ impl<I> Corpus for InMemoryCorpus<I> {
     fn store_input_from(&self, _: &Testcase<Self::Input>) -> Result<(), Error> {
         Ok(())
     }
+
+    fn get_favored_id(&self) -> Option<CorpusId> {
+        self.favored_id
+    }
+
+    fn set_favored_id(&mut self, id: CorpusId) -> Result<(), Error> {
+        self.favored_id = Some(id);
+        Ok(())
+    }
 }
 
 impl<I> HasTestcase for InMemoryCorpus<I> {
@@ -478,6 +489,7 @@ impl<I> InMemoryCorpus<I> {
         Self {
             storage: TestcaseStorage::new(),
             current: None,
+            favored_id: None,
         }
     }
 }
