@@ -314,6 +314,7 @@ pub struct InMemoryCorpus<I> {
     current: Option<CorpusId>,
     /// Favored Id
     favored_id: Option<CorpusId>,
+    fast_count: usize,
 }
 
 impl<I> Corpus for InMemoryCorpus<I> {
@@ -323,6 +324,13 @@ impl<I> Corpus for InMemoryCorpus<I> {
     #[inline]
     fn count(&self) -> usize {
         self.storage.enabled.map.len()
+    }
+
+    fn count_fast(&self) -> usize {
+        return self.fast_count;
+    }
+    fn set_fast(&mut self, count: usize) {
+        self.fast_count = count;
     }
 
     /// Returns the number of all disabled entries
@@ -490,6 +498,7 @@ impl<I> InMemoryCorpus<I> {
             storage: TestcaseStorage::new(),
             current: None,
             favored_id: None,
+            fast_count: 0,
         }
     }
 }

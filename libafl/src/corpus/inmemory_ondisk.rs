@@ -57,6 +57,7 @@ pub struct InMemoryOnDiskCorpus<I> {
     meta_format: Option<OnDiskMetadataFormat>,
     prefix: Option<String>,
     locking: bool,
+    fast_count: usize,
 }
 
 impl<I> Corpus for InMemoryOnDiskCorpus<I>
@@ -69,6 +70,13 @@ where
     #[inline]
     fn count(&self) -> usize {
         self.inner.count()
+    }
+
+    fn count_fast(&self) -> usize {
+        return self.fast_count;
+    }
+    fn set_fast(&mut self, count: usize) {
+        self.fast_count = count;
     }
 
     /// Returns the number of all disabled entries
@@ -312,6 +320,7 @@ impl<I> InMemoryOnDiskCorpus<I> {
             meta_format,
             prefix,
             locking,
+            fast_count: 0,
         })
     }
 

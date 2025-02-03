@@ -523,27 +523,21 @@ where
 
     #[inline]
     fn usable_count(&self) -> usize {
-        self
-            .as_slice()
-            .len()
+        self.as_slice().len()
     }
 
     #[inline]
     fn hash_simple(&self) -> u64 {
-        RandomState::with_seeds(0, 0, 0, 0)
-            .hash_one(self)
+        RandomState::with_seeds(0, 0, 0, 0).hash_one(self)
     }
 
     #[inline]
     fn initial(&self) -> T {
-        self
-            .initial
+        self.initial
     }
 
     fn to_vec(&self) -> Vec<T> {
-        self
-            .as_slice()
-            .to_vec()
+        self.as_slice().to_vec()
     }
 
     /// Reset the map

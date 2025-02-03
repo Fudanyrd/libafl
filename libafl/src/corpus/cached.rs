@@ -67,6 +67,11 @@ where
         self.inner.count()
     }
 
+    fn count_fast(&self) -> usize {
+        return 0;
+    }
+    fn set_fast(&mut self, _count: usize) {}
+
     /// Returns the number of all disabled entries
     fn count_disabled(&self) -> usize {
         self.inner.count_disabled()

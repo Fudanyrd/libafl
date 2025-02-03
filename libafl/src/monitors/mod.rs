@@ -18,7 +18,7 @@ use alloc::{borrow::Cow, fmt::Debug, string::String, vec::Vec};
 use core::{fmt, fmt::Write, time::Duration};
 
 #[cfg(feature = "std")]
-pub use disk::{OnDiskJsonMonitor, OnDiskTomlMonitor, OnDiskCSVMonitor};
+pub use disk::{OnDiskCSVMonitor, OnDiskJsonMonitor, OnDiskTomlMonitor};
 use hashbrown::HashMap;
 use libafl_bolts::{current_time, format_duration_hms, ClientId};
 use serde::{Deserialize, Serialize};
@@ -344,6 +344,9 @@ pub struct ClientStats {
     // monitor (maybe we need a separated struct?)
     /// The corpus size for this client
     pub corpus_size: u64,
+    /// The number of fast corpus, only collected
+    /// by setcover method.
+    pub fast_corpus_size: u64,
     /// The time for the last update of the corpus size
     pub last_corpus_time: Duration,
     /// The total executions for this client
@@ -403,6 +406,11 @@ impl ClientStats {
     /// We got new information about corpus size for this client, insert them.
     pub fn update_corpus_size(&mut self, corpus_size: u64) {
         self.corpus_size = corpus_size;
+        self.last_corpus_time = current_time();
+    }
+    ///
+    pub fn update_fast_corpus_size(&mut self, fast_corpus_size: u64) {
+        self.fast_corpus_size = fast_corpus_size;
         self.last_corpus_time = current_time();
     }
 

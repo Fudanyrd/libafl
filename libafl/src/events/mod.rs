@@ -280,6 +280,8 @@ where
         exit_kind: ExitKind,
         /// The new corpus size of this client
         corpus_size: usize,
+        /// The number of fast corpus
+        fast_corpus_size: usize,
         /// The client config for this observers/testcase combination
         client_config: EventConfig,
         /// The time of generation of the event
@@ -967,6 +969,7 @@ mod tests {
             observers_buf: Some(observers_buf),
             exit_kind: ExitKind::Ok,
             corpus_size: 123,
+            fast_corpus_size: 121, // FIXME
             client_config: EventConfig::AlwaysUnique,
             time: current_time(),
             forward_id: None,

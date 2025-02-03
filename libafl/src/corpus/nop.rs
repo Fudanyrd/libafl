@@ -23,6 +23,11 @@ impl<I> Corpus for NopCorpus<I> {
         0
     }
 
+    fn count_fast(&self) -> usize {
+        return 0;
+    }
+    fn set_fast(&mut self, _count: usize) {}
+
     /// Returns the number of all disabled entries
     fn count_disabled(&self) -> usize {
         0

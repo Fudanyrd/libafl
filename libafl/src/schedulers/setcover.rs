@@ -4,7 +4,11 @@ use core::ops::DerefMut;
 use std::borrow::ToOwned;
 
 use crate::{
-    corpus::{Corpus, CorpusId}, observers::MapObserver, schedulers::{RemovableScheduler, Scheduler}, state::{HasCorpus, HasSetCover}, Error
+    corpus::{Corpus, CorpusId},
+    observers::MapObserver,
+    schedulers::{RemovableScheduler, Scheduler},
+    state::{HasCorpus, HasSetCover},
+    Error,
 };
 use libafl_bolts::ErrorBacktrace;
 
@@ -21,8 +25,8 @@ pub struct SetcoverScheduler<O> {
 
 impl<I, S, O> RemovableScheduler<I, S> for SetcoverScheduler<O> {}
 
-impl<O> SetcoverScheduler<O> 
-where 
+impl<O> SetcoverScheduler<O>
+where
     O: MapObserver<Entry = u8> + Clone,
 {
     /// Creates a new [`SetcoverScheduler`].
@@ -47,14 +51,9 @@ where
             let mut input_ref: core::cell::RefMut<
                 '_,
                 crate::corpus::Testcase<<<S as HasCorpus>::Corpus as Corpus>::Input>,
-            > = state
-                .corpus()
-                .get(id)
-                .unwrap()
-                .borrow_mut();
+            > = state.corpus().get(id).unwrap().borrow_mut();
 
-            let input = input_ref
-                .deref_mut();
+            let input = input_ref.deref_mut();
 
             match input.use_setcover_schedule() {
                 Ok(()) => {}
@@ -70,9 +69,7 @@ where
         // when we bump into a new path, we call update_bitmap_score()
         // to see if the path appears more favorable than existing ones.
         if true {
-            state.update_bitmap_score(
-                unsafe { self.observer.as_ref().unwrap().to_vec() },
-                id);
+            state.update_bitmap_score(unsafe { self.observer.as_ref().unwrap().to_vec() }, id);
         }
         return Ok(());
     }
@@ -85,7 +82,6 @@ where
                     .to_owned(),
             ));
         } else {
-
             // select next seed.
             println!("cull queue");
             state.cull_queue();
@@ -133,8 +129,8 @@ impl<O> HasQueueCycles for SetcoverScheduler<O> {
     }
 }
 
-impl<O> Default for SetcoverScheduler<O> 
-where 
+impl<O> Default for SetcoverScheduler<O>
+where
     O: MapObserver<Entry = u8> + Clone,
 {
     fn default() -> Self {

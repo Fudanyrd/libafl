@@ -115,6 +115,11 @@ pub trait Corpus: Sized {
     /// Returns the number of elements including disabled entries
     fn count_all(&self) -> usize;
 
+    /// Returns the number of fast elements
+    fn count_fast(&self) -> usize;
+    /// Set number of fast seeds
+    fn set_fast(&mut self, count: usize);
+
     /// Returns true, if no elements are in this corpus yet
     fn is_empty(&self) -> bool {
         self.count() == 0

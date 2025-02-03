@@ -1373,12 +1373,9 @@ where
 
             for i in 0..num_successors {
                 let successors: &Vec<u32> = &self.successor_map[edge_id];
-                let succ_id: &u32 = successors
-                    .get(i as usize)
-                    .unwrap();
+                let succ_id: &u32 = successors.get(i as usize).unwrap();
 
-                let succ_status = self
-                    .virgin_bits[*succ_id as usize];
+                let succ_status = self.virgin_bits[*succ_id as usize];
 
                 if succ_status == 0xff {
                     not_visited = true;
@@ -1398,9 +1395,7 @@ where
 
             for i in 0..num_successors {
                 let successors: &Vec<u32> = &self.successor_map[edge_id];
-                let succ_id: &u32 = successors
-                    .get(i as usize)
-                    .unwrap();
+                let succ_id: &u32 = successors.get(i as usize).unwrap();
 
                 let virgin_status: u8 = self.virgin_bits[*succ_id as usize];
                 let current_status: u8 = trace_bits[*succ_id as usize];
@@ -1422,16 +1417,10 @@ where
 
         // get number of covered frontier nodes from input
         if true {
-            let input_ref: RefMut<'_, Testcase<I>> = self
-                .corpus()
-                .get(id)
-                .unwrap()
-                .borrow_mut();
+            let input_ref: RefMut<'_, Testcase<I>> = self.corpus().get(id).unwrap().borrow_mut();
             let input: &Testcase<I> = input_ref.deref();
 
-            init_count = input
-                .covered_frontier_nodes_count()
-                .unwrap();
+            init_count = input.covered_frontier_nodes_count().unwrap();
 
             real_map_size = input.frontier_node_bitmap().unwrap().len();
             assert!(real_map_size != 0);
@@ -1658,6 +1647,11 @@ where
                     }
                 }
 
+                // update the number of fast seeds.
+                if true {
+                    let count_fast = set_covered_fast_seed_list.len();
+                    self.corpus_mut().set_fast(count_fast);
+                }
                 if all_covered {
                     if fast_seed_exist {
                         // randomly select one of the fast seed.
@@ -1691,26 +1685,18 @@ where
                 if self.is_frontier_node_inner(&trace_bits, edge_id) {
                     // update this edge.
                     if true {
-                        let mut input_ref: RefMut<'_, Testcase<I>> = self
-                            .corpus()
-                            .get(id)
-                            .unwrap()
-                            .borrow_mut();
+                        let mut input_ref: RefMut<'_, Testcase<I>> =
+                            self.corpus().get(id).unwrap().borrow_mut();
 
-                        let input: &mut Testcase<I> = input_ref
-                            .deref_mut();
+                        let input: &mut Testcase<I> = input_ref.deref_mut();
 
-                        let frontier_bitmap: &mut Bitmap = input
-                                .frontier_node_bitmap_mut()
-                                .unwrap();
-                        frontier_bitmap
-                            .set(edge_id);
+                        let frontier_bitmap: &mut Bitmap =
+                            input.frontier_node_bitmap_mut().unwrap();
+                        frontier_bitmap.set(edge_id);
 
-                        let nodes_count: u32 = input
-                            .covered_frontier_nodes_count()
-                            .unwrap();
-                        let _res: Result<(), Error> = input
-                                .set_covered_frontier_nodes_count(nodes_count + 1);
+                        let nodes_count: u32 = input.covered_frontier_nodes_count().unwrap();
+                        let _res: Result<(), Error> =
+                            input.set_covered_frontier_nodes_count(nodes_count + 1);
                     }
 
                     // update global frontier bitmap.

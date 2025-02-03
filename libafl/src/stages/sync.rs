@@ -279,6 +279,7 @@ where
                         observers_buf: None,
                         exit_kind: ExitKind::Ok,
                         corpus_size: 0, // TODO choose if sending 0 or the actual real value
+                        fast_corpus_size: 0,
                         client_config: EventConfig::AlwaysUnique,
                         time: current_time(),
                         forward_id: None,
