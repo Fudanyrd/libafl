@@ -1549,6 +1549,12 @@ where
             }
         }
 
+        // shuffle unselected seeds.
+        if true {
+            use rand::seq::SliceRandom;
+            unselected_seeds.shuffle(&mut rand::thread_rng());
+        }
+
         // compute mean and standard deviation
         let corpus_count_f: f64 = self.corpus().count() as f64;
         let mean_exec_us: f64 = (total_exec_us - max_exec_us) / (corpus_count_f - 1.0);
@@ -1565,7 +1571,9 @@ where
 
             while unselected_seeds_count > 0 {
                 // randomly sample a seed.
-                let random_idx: usize = getrand64() % unselected_seeds.len();
+                // for unselected seeds are already shuffled,
+                // we can just use the last one.
+                let random_idx: usize = (unselected_seeds_count - 1) as usize;
                 let seed_index: CorpusId = all_seeds[random_idx];
                 let mut exec_time: f64 = DEFAULT_EXEC_TIME_US;
 

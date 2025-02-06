@@ -341,7 +341,12 @@ where
                 write!(
                     fileref,
                     "{}, {}, {}, {}, {}, {}, ",
-                    i, client.corpus_size, client.fast_corpus_size, client.objective_size, client.executions, exec_sec
+                    i,
+                    client.corpus_size,
+                    client.fast_corpus_size,
+                    client.objective_size,
+                    client.executions,
+                    exec_sec
                 )
                 .expect("Failed to write to the csv file");
 
