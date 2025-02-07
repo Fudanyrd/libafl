@@ -3,7 +3,7 @@
 //! In this example, you will see the use of the `launcher` feature.
 //! The `launcher` will spawn new processes for each cpu core.
 use core::time::Duration;
-use std::{env, net::SocketAddr, path::PathBuf, fs::File};
+use std::{env, fs::File, net::SocketAddr, path::PathBuf};
 
 use clap::{self, Parser};
 use libafl::observers::ExplicitTracking;
@@ -15,7 +15,7 @@ use libafl::{
     feedbacks::{CrashFeedback, MaxMapFeedback, TimeFeedback, TimeoutFeedback},
     fuzzer::{Fuzzer, StdFuzzer},
     inputs::{BytesInput, HasTargetBytes},
-    monitors::{MultiMonitor, OnDiskTomlMonitor, OnDiskCSVMonitor},
+    monitors::{MultiMonitor, OnDiskCSVMonitor, OnDiskTomlMonitor},
     mutators::{
         havoc_mutations::havoc_mutations,
         scheduled::{tokens_mutations, StdScheduledMutator},
@@ -142,12 +142,8 @@ pub extern "C" fn libafl_main() {
 
     let shmem_provider = StdShMemProvider::new().expect("Failed to init shared memory");
 
-    let mut fobj = File::create("./fuzzer_stats.csv")
-        .expect("Failed to create fuzzer_stats.toml");
-    let monitor = OnDiskCSVMonitor::new(
-        &mut fobj,
-        MultiMonitor::new(|s| println!("{s}")),
-    );
+    let mut fobj = File::create("./fuzzer_stats.csv").expect("Failed to create fuzzer_stats.toml");
+    let monitor = OnDiskCSVMonitor::new(&mut fobj, MultiMonitor::new(|s| println!("{s}")));
     println!("monitor");
 
     let mut run_client = |state: Option<_>, mut restarting_mgr, _client_description| {
