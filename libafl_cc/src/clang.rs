@@ -110,6 +110,7 @@ pub struct ClangWrapper {
     cc_args: Vec<String>,
     link_args: Vec<String>,
     passes: Vec<LLVMPasses>,
+    custom_passes: Vec<PathBuf>,
     passes_args: Vec<String>,
     passes_linking_args: Vec<String>,
 }
@@ -449,6 +450,29 @@ impl ToolWrapper for ClangWrapper {
                 args.push(pass.path().into_os_string().into_string().unwrap());
             }
         }
+        // execute custom passes
+        for pass in self.custom_passes.iter() {
+            use_pass = true;
+            if self.use_new_pm {
+                // https://github.com/llvm/llvm-project/issues/56137
+                // Need this -Xclang -load -Xclang -<pass>.so thing even with the new PM
+                // to pass the arguments to LLVM Passes
+                args.push("-Xclang".into());
+                args.push("-load".into());
+                args.push("-Xclang".into());
+                args.push(pass.clone().into_os_string().into_string().unwrap());
+                args.push("-Xclang".into());
+                args.push(format!(
+                    "-fpass-plugin={}",
+                    pass.clone().into_os_string().into_string().unwrap()
+                ));
+            } else {
+                args.push("-Xclang".into());
+                args.push("-load".into());
+                args.push("-Xclang".into());
+                args.push(pass.clone().into_os_string().into_string().unwrap());
+            }
+        }
         if !self.is_asm && !self.passes.is_empty() {
             for passes_arg in &self.passes_args {
                 args.push("-mllvm".into());
@@ -585,6 +609,7 @@ impl ClangWrapper {
             cc_args: vec![],
             link_args: vec![],
             passes: vec![],
+            custom_passes: vec![],
             passes_args: vec![],
             passes_linking_args: vec![],
             is_silent: false,
@@ -619,6 +644,14 @@ impl ClangWrapper {
     pub fn add_pass(&mut self, pass: LLVMPasses) -> &'_ mut Self {
         self.passes.push(pass);
         self
+    }
+
+    /// Add a custom LLVM Pass
+    pub fn add_custom_pass(&mut self, pass: PathBuf) -> &'_ mut Self {
+        // if pass does not exist, panic.
+        assert!(pass.exists());
+        self.custom_passes.push(pass);
+        return self;
     }
 
     /// Add LLVM pass arguments
