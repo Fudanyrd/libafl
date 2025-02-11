@@ -334,6 +334,17 @@ pub const LIBAFL_CC_LLVM_VERSION: Option<usize> = None;
         .expect("Could not parse LIBAFL_EDGES_MAP_DEFAULT_SIZE");
     cxxflags.push(format!("-DEDGES_MAP_DEFAULT_SIZE={edge_map_default_size}"));
 
+    // nlohmann include path
+    if let Ok(json_path) = std::env::var("JSON_PATH") {
+        cxxflags.push(String::from("-I/") + &json_path + &String::from("/include"));
+    } else {
+        panic!("env var JSON_PATH not set, needed by dump-cfg-path\n\
+Help: download the source of nlohmann json library, \n\
+and specify its path in env var JSON_PATH\n\
+Project Github Repo: https://github.com/nlohmann/json"
+       );
+    }
+
     let acc_map_size: usize = option_env!("LIBAFL_ACCOUNTING_MAP_SIZE")
         .map_or(Ok(65_536), str::parse)
         .expect("Could not parse LIBAFL_ACCOUNTING_MAP_SIZE");
@@ -526,7 +537,7 @@ pub const LIBAFL_CC_LLVM_VERSION: Option<usize> = None;
         src_dir,
         "dump-cfg-pass.cc",
         None,
-        false,
+        true,
     );
 
     #[cfg(feature = "profiling")]
