@@ -503,6 +503,39 @@ impl ToolWrapper for ClangWrapper {
         Ok(args)
     }
 
+    fn filter_for_cfg(&mut self, args: &Vec<String>) -> Result<Vec<String>, Error> {
+        let mut ret: Vec<String> = vec![];
+
+        if let Ok(cfg_ld) = env::var("CFG_LD") {
+            ret.push(cfg_ld);
+        } else {
+            panic!("CFG_LD is not set.");
+        }
+        
+        let mut i: usize = 1;
+        while i < args.len() {
+            let arg: &String = &args[i];
+            if arg.starts_with("-") || arg.ends_with(".") {
+                if *arg == (String::from("-o")) {
+                    i += 1;
+                    assert!(i < args.len());
+                    ret.push("-o".into());
+                    ret.push(self.extend_cfg(&args[i]));
+                }
+                if *arg == String::from("-Xclang") {
+                    i += 1;
+                }
+
+                i += 1;
+            } else {
+                ret.push(self.extend_cfg(&arg));
+                i += 1;
+            }
+        }
+
+        return Ok(ret);
+    } 
+
     fn is_linking(&self) -> bool {
         self.linking
     }

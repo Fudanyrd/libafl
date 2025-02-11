@@ -338,11 +338,12 @@ pub const LIBAFL_CC_LLVM_VERSION: Option<usize> = None;
     if let Ok(json_path) = std::env::var("JSON_PATH") {
         cxxflags.push(String::from("-I/") + &json_path + &String::from("/include"));
     } else {
-        panic!("env var JSON_PATH not set, needed by dump-cfg-path\n\
+        panic!(
+            "env var JSON_PATH not set, needed by dump-cfg-path\n\
 Help: download the source of nlohmann json library, \n\
 and specify its path in env var JSON_PATH\n\
 Project Github Repo: https://github.com/nlohmann/json"
-       );
+        );
     }
 
     let acc_map_size: usize = option_env!("LIBAFL_ACCOUNTING_MAP_SIZE")

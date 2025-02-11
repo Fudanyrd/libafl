@@ -170,8 +170,8 @@ bool DumpCfgPass::runOnModule(Module &M) {
   // Dump CFG for this module
   for (auto record = bb_to_cur_loc.begin(); record != bb_to_cur_loc.end();
        record++) {
-    auto        current_bb = record->getFirst();
-    auto        loc = record->getSecond();
+    BasicBlock *current_bb = record->getFirst();
+    uint32_t    loc = record->getSecond();
     Function   *calling_func = current_bb->getParent();
     std::string func_name = std::string("");
 

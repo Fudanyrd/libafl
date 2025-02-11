@@ -197,6 +197,58 @@ impl ToolWrapper for ArWrapper {
         Ok(args)
     }
 
+    fn filter_for_cfg(&mut self, args: &Vec<String>) -> Result<Vec<String>, Error> {
+        let mut ret: Vec<String> = vec![];
+
+        if let Ok(cfg_ld) = env::var("CFG_LD") {
+            ret.push(cfg_ld);
+        } else {
+            panic!("CFG_LD is not set.");
+        }
+        
+        let mut i: usize = 1;
+        while i < args.len() {
+            let arg: &String = &args[i];
+            if arg.starts_with("-") || arg.ends_with(".") {
+                if *arg == (String::from("-o")) {
+                    i += 1;
+                    assert!(i < args.len());
+                    ret.push("-o".into());
+                    ret.push(self.extend_cfg(&args[i]));
+                }
+                if *arg == String::from("-Xclang") {
+                    i += 1;
+                }
+
+                i += 1;
+            } else {
+                let cfg: String = self.extend_cfg(&arg);
+                let arg_as_path: PathBuf = PathBuf::from(arg);
+                if let Some(extension) = arg_as_path.extension() {
+                    let extension: &str = extension.to_str().unwrap();
+                    let extension_lowercase: String = extension.to_lowercase();
+                    match &extension_lowercase[..] {
+                        "o" | "lo" | "so" | "ao" | "c.o" | "pch" => {
+                            ret.push(cfg);
+                        }
+                        "a" | "la" => {
+                            ret.push("-o".into());
+                            ret.push(cfg);
+                        }
+                        _ => {
+                            // not an input/output path name
+                        }
+                    }
+                } else {
+                    // not a path name
+                }
+                i += 1;
+            }
+        }
+
+        return Ok(ret);
+    } 
+
     fn is_linking(&self) -> bool {
         self.linking
     }
