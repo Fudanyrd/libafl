@@ -25,6 +25,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include <fcntl.h>
 #include <ctype.h>
 
@@ -168,6 +169,7 @@ bool DumpCfgPass::runOnModule(Module &M) {
   nlohmann::json cfg;
 
   // Dump CFG for this module
+  size_t num_edges = 0;
   for (auto record = bb_to_cur_loc.begin(); record != bb_to_cur_loc.end();
        record++) {
     BasicBlock *current_bb = record->getFirst();
@@ -185,6 +187,7 @@ bool DumpCfgPass::runOnModule(Module &M) {
          bb_successor != succ_end(current_bb); bb_successor++) {
       outgoing.push_back(bb_to_cur_loc[*bb_successor]);
     }
+    num_edges += outgoing.size();
     cfg["edges"][func_name][loc] = outgoing;
   }
 
@@ -214,10 +217,39 @@ bool DumpCfgPass::runOnModule(Module &M) {
         bb_to_cur_loc[record->getSecond()];
   }
 
-  if (getenv("CFG_OUTPUT_PATH")) {
-    std::ofstream cfg_out(getenv("CFG_OUTPUT_PATH") + std::string("/") +
-                          std::string(moduleName) + ".cfg");
-    cfg_out << cfg << "\n";
+  static char buf[1024];
+  const char *output_path = getcwd(buf, sizeof(buf));
+  if (output_path) {
+    std::string cfg_out_path = output_path + std::string("/") +
+                               std::string(moduleName) + ".cfg";
+    std::ostringstream oss;
+    oss << cfg << std::endl;
+    int _fd = open(cfg_out_path.c_str(), O_CREAT | O_TRUNC | O_RDWR, 0644);
+    if (_fd < 0) {
+      // cannot create output file.
+      fprintf(stderr, "NOTE: output_path %s, module_name %s\n", cfg_out_path.c_str(),
+              moduleName.data());
+      // if PERMISSION DENIED,
+      // try to create the directory first.
+      perror("\033[01;31m[!]\033[0;m " __FILE__);
+      exit(1);
+    }
+    write(_fd, oss.str().c_str(), oss.str().size());
+    close(_fd);
+
+    // std::ofstream cfg_out(cfg_out_path.c_str());
+    // cfg_out << cfg << std::endl;
+    // cfg_out.close();
+
+    int fd = open(cfg_out_path.c_str(), O_RDONLY);
+    if (fd < 0) {
+      perror("\033[01;31m[!]\033[0;m " __FILE__);
+      std::cerr << "\033[01;31m[!]\033[0;m dump-cfg-pass IO error!" << std::endl;
+      exit(1);
+    }
+    close(fd);
+    std::cerr << "\033[01;32m[+]\033[0;m dump-cfg-pass instrumented " 
+      << num_edges << " edges." << std::endl;
   } else {
     FATAL("CFG_OUTPUT_PATH not set!");
   }
