@@ -12,25 +12,27 @@ class CFGLinker():
 
   def add_cfg_file(self, file_name):
     """ Add a cfg file """
-    print("\033[01;92m[+]\033[0;m cfg-ld: linking", file_name)
+    print("\033[01;92m[+]\033[0;m cfg-ld: linking", file_name, file=sys.stderr)
     if not os.path.exists(file_name):
       self.error(f"{file_name}: No such file or directory")
     try:
       with open(file_name, 'r') as fobj:
         obj = json.load(fobj)
+        if obj is None:
+          obj = {
+            "calls": {},
+            "edges": {},
+            "entries": {},
+          }
         self.add_object(obj)
       del obj
     except Exception as e:
       self.error(f"{file_name}: {e}.")
   
   def add_object(self, obj: dict):
-    for key in ['calls', 'entries', 'edges']:
-      if key not in obj.keys():
-        raise RuntimeError(f"key {key} not found.")
-    
-    new_calls = obj['calls']
-    new_edges = obj['edges']
-    new_entries = obj['entries']
+    new_calls = obj['calls'] if 'calls' in obj.keys() else {}
+    new_edges = obj['edges'] if 'edges' in obj.keys() else {}
+    new_entries = obj['entries'] if 'entries' in obj.keys() else {}
 
     for key in new_calls:
       if key in self.calls.keys():
@@ -40,7 +42,9 @@ class CFGLinker():
     
     for key in new_edges:
       if key in self.edges.keys():
-        raise RuntimeError(f"duplicate key {key} found in \'edges\'")
+        # raise RuntimeError(f"duplicate key {key} found in \'edges\'")
+        print("cfg-ld: \033[01;33mWarning:\033[0;m duplicate key", key, "found in \'edges\'", file=sys.stderr)
+        self.edges[key] = new_edges[key]
       else:
         self.edges[key] = new_edges[key]
       
@@ -57,7 +61,7 @@ class CFGLinker():
   
   def error(self, message: str):
     """ Print a error message and exit. """
-    print("cfg-ld: \033[01;31merror:\033[0m", message)
+    print("cfg-ld: \033[01;31merror:\033[0m", message, file=sys.stderr)
     raise RuntimeError("Further execution is not possible.")
   
   def output(self, file_name = "a.out.cfg"):
@@ -78,17 +82,20 @@ OJBECT_EXTENSION = ".o"
 
 if __name__ == "__main__":
   args = sys.argv[1:]
-  print("\033[01;32m[*]\033[0;m cfg-ld", args)
+  print("\033[01;32m[*]\033[0;m cfg-ld", args, file=sys.stderr)
   linker: CFGLinker = CFGLinker()
   if len(args) == 0:
-    linker.error("No input files")
+    print("cfg-ld: \033[01;31merror:\033[0;m cfg-ld", "No input files", file=sys.stderr)
+    sys.exit(0)
 
   # filter args
 
   # parser args
   i = 0
   input_files = []
-  output_file = "a.out.cfg"
+  output_file = os.path.join(
+    os.environ["CFG_OUTPUT_PATH"], "a.out.cfg"
+  )
   while i < len(args):
     if args[i] == "-o" or args[i] == "--output":
       output_file = args[i + 1]
