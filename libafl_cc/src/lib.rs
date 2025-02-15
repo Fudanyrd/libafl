@@ -41,7 +41,7 @@
 )]
 
 use core::str;
-use std::{path::Path, process::Command};
+use std::{env, path::{Path, PathBuf}, process::Command};
 
 pub mod ar;
 pub use ar::ArWrapper;
@@ -120,11 +120,11 @@ impl Configuration {
     }
     /// Insert a `Configuration` specific 'tag' in the extension of the given file
     #[must_use]
-    pub fn replace_extension(&self, path: &Path) -> std::path::PathBuf {
+    pub fn replace_extension(&self, path: &Path) -> PathBuf {
         let mut parent = if let Some(parent) = path.parent() {
             parent.to_path_buf()
         } else {
-            std::path::PathBuf::from("")
+            PathBuf::from("")
         };
         let output = path.file_name().unwrap();
         let output = output.to_str().unwrap();
@@ -229,6 +229,23 @@ pub trait ToolWrapper {
         configuration: Configuration,
     ) -> Result<Vec<String>, Error>;
 
+    /// Command for generating CFG graph.
+    fn command_for_cfg(&mut self, configuration: Configuration) -> Result<Vec<String>, Error> {
+        let args = self.command_for_configuration(configuration)?;
+        return self.filter_for_cfg(&args);
+    }
+
+    /// Filter result of command_for_configuration()
+    /// to build command_for_cfg()
+    fn filter_for_cfg(&mut self, args: &Vec<String>) -> Result<Vec<String>, Error> {
+        return Err(Error::InvalidArguments("not implemented".into()));
+    }
+
+    /// add cfg file extension to the output path
+    fn extend_cfg(&self, arg: &String) -> String {
+        arg.clone() + &String::from(".cfg")
+    }
+
     /// Get the list of requested `Configuration`s
     fn configurations(&self) -> Result<Vec<Configuration>, Error>;
 
@@ -256,9 +273,34 @@ pub trait ToolWrapper {
         } else {
             self.configurations()?
         };
-        for configuration in configurations {
-            let mut args = self.command_for_configuration(configuration)?;
+        for configuration in &configurations {
+            let mut args = self.command_for_configuration(configuration.clone())?;
             self.filter(&mut args);
+
+            if !self.is_silent() {
+                dbg!(args.clone());
+            }
+            if args.is_empty() {
+                last_status = Err(Error::InvalidArguments(
+                    "The number of arguments cannot be 0".into(),
+                ));
+                continue;
+            }
+            let status = match Command::new(&args[0]).args(&args[1..]).status() {
+                Ok(s) => s,
+                Err(e) => {
+                    last_status = Err(Error::Io(e));
+                    continue;
+                }
+            };
+            if !self.is_silent() {
+                dbg!(status);
+            }
+            last_status = Ok(status.code());
+        }
+        for configuration in &configurations {
+            let mut args = self.command_for_configuration(configuration.clone())?;
+            args = self.filter_for_cfg(&mut args)?;
 
             if !self.is_silent() {
                 dbg!(args.clone());
