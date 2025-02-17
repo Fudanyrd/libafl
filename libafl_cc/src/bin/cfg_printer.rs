@@ -3,7 +3,7 @@ use std::env;
 use libafl_cc::{CfgEdge, ControlFlowGraph, HasWeight};
 
 pub fn main() {
-  let args: Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
     struct TestMetadata {}
 
     impl HasWeight<TestMetadata> for TestMetadata {
@@ -12,10 +12,10 @@ pub fn main() {
         }
     }
 
-  for i in 1..args.len() {
-    let file = &args[i];
-    let _cfg = ControlFlowGraph::<TestMetadata>::from_file(&file);
-    
-    println!("{} is a valid file", file);
-  }
+    for i in 1..args.len() {
+        let file = &args[i];
+        let _cfg = ControlFlowGraph::<TestMetadata>::from_file(&file);
+
+        println!("{} is a valid file", file);
+    }
 }

@@ -36,7 +36,8 @@ class CFGLinker():
 
     for key in new_calls:
       if key in self.calls.keys():
-        raise RuntimeError(f"duplicate key {key} found in \'calls\'")
+        print("cfg-ld: \033[01;33mWarning:\033[0;m duplicate key", key, "found in \'calls\'", file=sys.stderr)
+        self.calls[key] = new_calls[key]
       else:
         self.calls[key] = new_calls[key]
     
@@ -93,9 +94,7 @@ if __name__ == "__main__":
   # parser args
   i = 0
   input_files = []
-  output_file = os.path.join(
-    os.environ["CFG_OUTPUT_PATH"], "a.out.cfg"
-  )
+  output_file = "a.out.cfg"
   while i < len(args):
     if args[i] == "-o" or args[i] == "--output":
       output_file = args[i + 1]

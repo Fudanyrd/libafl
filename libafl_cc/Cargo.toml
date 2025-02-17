@@ -32,6 +32,7 @@ default = [
   "dump-cfg",
   "profiling",
 ]
+"cfg-ld" = []
 
 # llvm passes
 ddg-instr = []

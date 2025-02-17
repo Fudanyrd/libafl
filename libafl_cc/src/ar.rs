@@ -247,7 +247,7 @@ impl ToolWrapper for ArWrapper {
         }
 
         return Ok(ret);
-    } 
+    }
 
     fn is_linking(&self) -> bool {
         self.linking

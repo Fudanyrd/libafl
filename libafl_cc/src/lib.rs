@@ -41,7 +41,11 @@
 )]
 
 use core::str;
-use std::{env, path::{Path, PathBuf}, process::Command};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 pub mod ar;
 pub use ar::ArWrapper;
@@ -298,6 +302,7 @@ pub trait ToolWrapper {
             }
             last_status = Ok(status.code());
         }
+        #[cfg(feature = "cfg-ld")]
         for configuration in &configurations {
             let mut args = self.command_for_configuration(configuration.clone())?;
             args = self.filter_for_cfg(&mut args)?;

@@ -217,10 +217,9 @@ bool DumpCfgPass::runOnModule(Module &M) {
         bb_to_cur_loc[record->getSecond()];
   }
 
-  static char buf[1024];
-  const char *output_path = getcwd(buf, sizeof(buf));
+  const char *output_path = "";
   if (output_path) {
-    std::string cfg_out_path = output_path + std::string("/") +
+    std::string cfg_out_path = output_path + 
                                std::string(moduleName) + ".cfg";
     std::ostringstream oss;
     oss << cfg << std::endl;

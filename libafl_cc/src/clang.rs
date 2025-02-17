@@ -511,7 +511,7 @@ impl ToolWrapper for ClangWrapper {
         } else {
             panic!("CFG_LD is not set.");
         }
-        
+
         let mut i: usize = 1;
         while i < args.len() {
             let arg: &String = &args[i];
@@ -534,7 +534,7 @@ impl ToolWrapper for ClangWrapper {
         }
 
         return Ok(ret);
-    } 
+    }
 
     fn is_linking(&self) -> bool {
         self.linking

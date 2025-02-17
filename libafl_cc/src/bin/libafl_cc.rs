@@ -18,10 +18,11 @@ pub fn main() {
 
         let mut cc = ClangWrapper::new();
         cc.add_pass(LLVMPasses::DumpCfg); //.add_custom_pass("/home/liuyu/SeedScheduling/SanitizerCoveragePCGUARD.so".into());
+        cc.add_pass(LLVMPasses::CoverageAccounting);
         if let Some(code) = cc
             .cpp(is_cpp)
             // silence the compiler wrapper output, needed for some configure scripts.
-            .silence(true)
+            .silence(false)
             .parse_args(&args)
             .expect("Failed to parse the command line")
             .add_configuration(Configuration::GenerateCoverageMap)
