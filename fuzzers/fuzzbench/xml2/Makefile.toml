@@ -92,3 +92,10 @@ args = [
   "${FUZZER_NAME}",
 ]
 dependencies = ["lib", "cxx", "cc", "harness_obj"]
+
+[tasks.cfg]
+command = "${PROJECT_DIR}/../gen_graph.py"
+args = [
+  "${PROJECT_DIR}/${FUZZER_NAME}.asan"
+]
+dependencies = ["fuzzer"]
