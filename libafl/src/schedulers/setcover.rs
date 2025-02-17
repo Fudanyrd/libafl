@@ -83,7 +83,6 @@ where
             ));
         } else {
             // select next seed.
-            println!("cull queue");
             state.cull_queue();
 
             // try to get the favored id.
