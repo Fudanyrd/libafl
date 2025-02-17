@@ -1,0 +1,76 @@
+{
+  "calls": {
+    "LLVMFuzzerTestOneInput": {
+      "0": [
+        "CheckStr",
+        "CheckStrv2"
+      ]
+    },
+    "CheckStr": {
+      "0": [
+        "strncmp"
+      ],
+      "1": [
+        "abort"
+      ],
+      "5": [
+        "abort"
+      ]
+    },
+    "CheckStrv2": {
+      "3": [
+        "abort"
+      ]
+    }
+  },
+  "edges": {
+    "LLVMFuzzerTestOneInput": [
+      []
+    ],
+    "CheckStr": [
+      [
+        1,
+        2
+      ],
+      [],
+      [
+        3,
+        6
+      ],
+      [
+        4,
+        6
+      ],
+      [
+        5,
+        6
+      ],
+      [],
+      []
+    ],
+    "CheckStrv2": [
+      [
+        1,
+        4
+      ],
+      [
+        2,
+        4
+      ],
+      [
+        3,
+        4
+      ],
+      [],
+      []
+    ]
+  },
+  "entries": {
+    "CheckStr": 0,
+    "CheckStrv2": 0,
+    "LLVMFuzzerTestOneInput": 0,
+    "llvm.dbg.declare": 0,
+    "abort": 0,
+    "strncmp": 0
+  }
+}
