@@ -1,0 +1,5 @@
+# project source code
+xml2/
+
+# compiled binaries
+fuzzer_libxml2*

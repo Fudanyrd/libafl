@@ -1,0 +1,94 @@
+# Variables
+[env]
+FUZZER_NAME = 'fuzzer_libxml2'
+CARGO_TARGET_DIR = { value = "${PROJECT_DIR}/target", condition = { env_not_set = [
+  "CARGO_TARGET_DIR",
+] } }
+PROFILE = { value = "release", condition = { env_not_set = ["PROFILE"] } }
+CFG_GEN_PASS = { value = "/home/liuyu/SeedScheduling/SanitizerCoveragePCGUARD.so", condition = { env_not_set = ["CFG_GEN_PASS"] } }
+PROFILE_DIR = { source = "${PROFILE}", default_value = "release", mapping = { "release" = "release", "dev" = "debug" }, condition = { env_not_set = [
+  "PROFILE_DIR",
+] } }
+LIBAFL_CC = '${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cc'
+LIBAFL_CXX = '${CARGO_TARGET_DIR}/${PROFILE}/libafl_cxx'
+LIBAFL_AR = '${CARGO_TARGET_DIR}/${PROFILE}/libafl_ar'
+LIBAFL_LIBTOOL = '${CARGO_TARGET_DIR}/${PROFILE}/libafl_libtool'
+FUZZER = '${CARGO_TARGET_DIR}/${PROFILE_DIR}/${FUZZER_NAME}'
+PROJECT_DIR = { script = ["pwd"] }
+# required if need libafl_cc's dump-cfg-pass
+# CFG_LD = { value = "../../../libafl_cc/src/cfg-ld.py", condition = { env_not_set = ["CFG_LD"] } }
+# required if need libafl_cc's dump-cfg-pass
+# JSON_PATH = { value = "/home/liuyu/json", conditioin = { env_not_set = ["JSON_PATH"] } }
+
+[tasks.cc]
+script_runner = "@shell"
+script = '''
+JSON_PATH=${JSON_PATH} cargo build --profile ${PROFILE}
+'''
+
+[tasks.cxx]
+dependencies = ["cc"]
+
+[tasks.ar]
+dependencies = ["cc"]
+
+# download source code of xml2
+[tasks.source]
+condition = { files_not_exist = ["${PROJECT_DIR}/xml2"]}
+script_runner = "@shell"
+script = '''
+git clone https://gitlab.gnome.org/GNOME/libxml2.git ${PROJECT_DIR}/xml2 --depth 1
+'''
+
+[tasks.lib]
+condition = { files_not_exist = ["${PROJECT_DIR}/xml2/.libs/libxml2.a"] }
+script_runner = "@shell"
+script = '''
+cd "${PROJECT_DIR}/xml2"
+CC=${LIBAFL_CC} CXX=${LIBAFL_CXX} AR=${LIBAFL_AR} ./autogen.sh
+CC=${LIBAFL_CC} CXX=${LIBAFL_CXX} AR=${LIBAFL_AR} ./configure --enable-static=yes --enable-shared=no
+export CFG_GEN_PASS=${CFG_GEN_PASS}
+make CC=${LIBAFL_CC} CXX=${LIBAFL_CXX} AR=${LIBAFL_AR}
+'''
+dependencies = ["cc", "cxx", "ar", "source"]
+
+[tasks.clean_lib]
+script_runner = "@shell"
+command = "make"
+args = ["-C", "${PROJECT_DIR}/xml2", "clean"]
+
+[tasks.clean_miscellaneous]
+script_runner = "@shell"
+script = '''
+rm -f ${PROJECT_DIR}/*.o ${PROJECT_DIR}/*.cfg ${PROJECT_DIR}/fuzzer_libxml2*
+'''
+
+[tasks.clean_cargo]
+script_runner = "@shell"
+command = "cargo"
+args = ["clean"]
+
+[tasks.clean]
+dependencies = ["clean_lib", "clean_miscellaneous", "clean_cargo"]
+
+[tasks.harness_obj]
+condition = { files_not_exist = ["${PROJECT_DIR}/harness.o"]}
+command = "${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cxx"
+args = [
+  "-c",
+  "${PROJECT_DIR}/harness.cc",
+  "-I${PROJECT_DIR}/xml2/include",
+  "-o",
+  "${PROJECT_DIR}/harness.o"
+]
+dependencies = ["cxx", "cc"]
+
+[tasks.fuzzer]
+command = "${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cxx"
+args = [
+  "${PROJECT_DIR}/harness.o",
+  "${PROJECT_DIR}/xml2/.libs/libxml2.a",
+  "-o",
+  "${FUZZER_NAME}",
+]
+dependencies = ["lib", "cxx", "cc", "harness_obj"]
