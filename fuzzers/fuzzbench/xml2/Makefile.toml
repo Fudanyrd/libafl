@@ -31,6 +31,7 @@ ls ${CFG_GEN_PASS}
 '''
 
 [tasks.cc]
+condition = { files_not_exist = ["${LIBAFL_CC}"] }
 script_runner = "@shell"
 script = '''
 JSON_PATH=${JSON_PATH} cargo build --profile ${PROFILE}
@@ -38,9 +39,11 @@ JSON_PATH=${JSON_PATH} cargo build --profile ${PROFILE}
 dependencies = ["instrumentation"]
 
 [tasks.cxx]
+condition = { files_not_exist = ["${LIBAFL_CXX}"] }
 dependencies = ["cc"]
 
 [tasks.ar]
+condition = { files_not_exist = ["${LIBAFL_AR}"] }
 dependencies = ["cc"]
 
 # download source code of xml2
@@ -110,3 +113,11 @@ args = [
   "${PROJECT_DIR}/${FUZZER_NAME}.asan"
 ]
 dependencies = ["fuzzer"]
+
+[tasks.run]
+description = "Runs the fuzzer."
+script_runner = '@shell'
+script = '''
+AFL_CFG_PATH=${PROJECT_DIR}/fuzzer_libxml2_sancov_cfg ./fuzzer_libxml2.asan --input ${PROJECT_DIR}/input --cores 0
+'''
+dependencies = ["fuzzer", "cfg"]

@@ -36,6 +36,7 @@ ls ${CFG_GEN_PASS}
 # This project does not have to obtain source code from the internet.
 
 [tasks.cc]
+condition = { files_not_exist = ["${LIBAFL_CC}"] }
 script_runner = "@shell"
 script = '''
 JSON_PATH=${JSON_PATH} cargo build --profile ${PROFILE}
