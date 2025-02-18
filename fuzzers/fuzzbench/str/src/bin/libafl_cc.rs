@@ -17,7 +17,11 @@ pub fn main() {
         dir.pop();
 
         let mut cc = ClangWrapper::new();
-        cc.add_custom_pass("/home/liuyu/SeedScheduling/SanitizerCoveragePCGUARD.so".into());
+        if let Some(pass_path) = env::var("CFG_GEN_PASS").ok() {
+            cc.add_custom_pass(pass_path.into());
+        } else {
+            panic!("CFG_GEN_PASS not set");
+        }
         if let Some(code) = cc
             .cpp(is_cpp)
             // silence the compiler wrapper output, needed for some configure scripts.
