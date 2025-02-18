@@ -335,6 +335,7 @@ pub const LIBAFL_CC_LLVM_VERSION: Option<usize> = None;
     cxxflags.push(format!("-DEDGES_MAP_DEFAULT_SIZE={edge_map_default_size}"));
 
     // nlohmann include path
+    #[cfg(feature = "cfg-ld")]
     if let Ok(json_path) = std::env::var("JSON_PATH") {
         cxxflags.push(String::from("-I/") + &json_path + &String::from("/include"));
     } else {
@@ -538,7 +539,7 @@ Project Github Repo: https://github.com/nlohmann/json"
         src_dir,
         "dump-cfg-pass.cc",
         None,
-        true,
+        false,
     );
 
     #[cfg(feature = "profiling")]

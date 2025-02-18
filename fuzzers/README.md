@@ -10,6 +10,7 @@ They are sorted by focus:
 - [`forkserver`](./forkserver/): Fuzzers that use a forkserver-style executor.
 - [`full_system`](./full_system/): Fuzzers for full-system targets (kernels, firmwares, etc...).
 - [`fuzz_anything`](./fuzz_anything/): Fuzzers for advanced targets like WASM or python, and other fuzzers that can be used for anything.
+- [`fuzzbench`](./fuzzbench/): Fuzzers for benchmarking.
 - [`inprocess`](./inprocess/): Common In-process fuzzers. Most of the time, this is what you want.
 - [`structure_aware`](./structure_aware/): Grammar fuzzers, fuzzers for certain languages, fuzzers with custom inputs, and more.
 
