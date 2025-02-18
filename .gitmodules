@@ -1,3 +1,4 @@
 [submodule "SeedScheduling"]
 	path = SeedScheduling
 	url = git@github.com:Sweetaroo/SeedScheduling.git
+	branch = v4.30.instrument
