@@ -7,8 +7,9 @@ authors = [
 edition = "2021"
 
 [features]
-default = ["std"]
-std = []
+default = ["queue"]
+queue = []
+setcover = []
 
 [profile.release]
 lto = true

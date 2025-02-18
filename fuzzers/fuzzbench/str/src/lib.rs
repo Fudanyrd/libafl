@@ -22,7 +22,7 @@ use libafl::{
         token_mutations::Tokens,
     },
     observers::{CanTrack, HitcountsMapObserver, TimeObserver},
-    schedulers::{IndexesLenTimeMinimizerScheduler, SetcoverScheduler},
+    schedulers::{IndexesLenTimeMinimizerScheduler, SetcoverScheduler, QueueScheduler},
     stages::mutational::StdMutationalStage,
     state::{HasCorpus, HasSetCover, StdState},
     Error, HasMetadata,
@@ -214,10 +214,13 @@ pub extern "C" fn libafl_main() {
         let mut stages = tuple_list!(StdMutationalStage::new(mutator));
 
         // A setcover scheduler instance.
-        let mut setcover_sched = SetcoverScheduler::new(edges_observer.as_ref());
+        #[cfg(feature = "queue")]
+        let base_scheduler = QueueScheduler::new();
+        #[cfg(feature = "setcover")]
+        let base_scheduler = SetcoverScheduler::new(edges_observer.as_ref());
 
         // A minimization+queue policy to get testcasess from the corpus
-        let scheduler = IndexesLenTimeMinimizerScheduler::new(&edges_observer, setcover_sched);
+        let scheduler = IndexesLenTimeMinimizerScheduler::new(&edges_observer, base_scheduler);
 
         // A fuzzer with feedbacks and a corpus scheduler
         let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
@@ -262,7 +265,9 @@ pub extern "C" fn libafl_main() {
 
         // In case the corpus is empty (on first run), reset
         if state.must_load_initial_inputs() {
+            #[cfg(feature = "setcover")]
             state.use_setcover_schedule();
+
             state
                 .load_initial_inputs_forced(
                     &mut fuzzer,
