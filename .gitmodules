@@ -1,0 +1,3 @@
+[submodule "SeedScheduling"]
+	path = SeedScheduling
+	url = git@github.com:Sweetaroo/SeedScheduling.git
