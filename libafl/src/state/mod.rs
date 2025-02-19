@@ -50,7 +50,7 @@ use crate::{
 pub const DEFAULT_MAX_SIZE: usize = 1_048_576;
 
 /// map size
-pub const MAP_SIZE: usize = 1 << 17;
+pub const MAP_SIZE: usize = 1 << 10;
 
 /// successor size
 pub const MAX_SUCCESSOR_COUNT: usize = 1024;
@@ -1229,8 +1229,8 @@ where
     }
 
     /// Returns the map size.
-    pub fn get_map_size() -> usize {
-        return MAP_SIZE;
+    pub fn get_map_size(self) -> usize {
+        return self.successor_map.len();
     }
 
     /// Creates a new `State`, taking ownership of all of the individual components during fuzzing.
@@ -1287,12 +1287,32 @@ where
             score_changed: false,
             successor_map: vec![],   // init in load_cfg()
             successor_count: vec![], // init in load_cfg()
-            virgin_bits: vec![],     // init in use_setcover_schedule()
-            top_rated: vec![None; MAP_SIZE],
+            virgin_bits: vec![],     // init in load_cfg()
+            top_rated: vec![None; MAP_SIZE], // maybe resized in load_cfg()
         };
         feedback.init_state(&mut state)?;
         objective.init_state(&mut state)?;
         Ok(state)
+    }
+}
+
+struct ControlFlowGraphEdge {
+    src: usize,
+    dst: usize,
+}
+
+impl Default for ControlFlowGraphEdge {
+    fn default() -> Self {
+        ControlFlowGraphEdge { src: 0, dst: 0 }
+    }
+}
+
+impl Clone for ControlFlowGraphEdge {
+    fn clone(&self) -> Self {
+        ControlFlowGraphEdge {
+            src: self.src,
+            dst: self.dst,
+        }
     }
 }
 
@@ -1304,10 +1324,13 @@ where
     SC: Corpus<Input = <Self as UsesInput>::Input>,
 {
     fn load_cfg(&mut self) {
-        self.successor_count = vec![0; MAP_SIZE];
-        for _i in 0..MAP_SIZE {
-            self.successor_map.push(vec![0; MAX_SUCCESSOR_COUNT]);
-        }
+        // auto detect the minimum size of map.
+        let mut map_size = MAP_SIZE;
+        let mut edges: Vec<ControlFlowGraphEdge> = vec![];
+        // self.successor_count = vec![0; MAP_SIZE];
+        // for _i in 0..MAP_SIZE {
+        //     self.successor_map.push(vec![0; MAX_SUCCESSOR_COUNT]);
+        // }
 
         // load environment variable AFL_CFG_PATH
         if let Ok(cfg_path) = std::env::var("AFL_CFG_PATH") {
@@ -1340,15 +1363,43 @@ where
                     src = v[0].parse::<usize>().unwrap();
                     dst = v[1].parse::<usize>().unwrap();
 
-                    let cnt: usize = self.successor_count[src] as usize;
-                    self.successor_map[src][cnt] = dst as u32;
-                    self.successor_count[src] += 1;
+                    if src + 1 > map_size {
+                        map_size = src + 1;
+                    }
+                    if dst + 1 > map_size {
+                        map_size = dst + 1;
+                    }
+
+                    edges.push(ControlFlowGraphEdge { src, dst });
+
+                    // let cnt: usize = self.successor_count[src] as usize;
+                    // self.successor_map[src][cnt] = dst as u32;
+                    // self.successor_count[src] += 1;
                 }
             } else {
                 panic!("AFL_CFG_PATH not exists");
             }
         } else {
             panic!("AFL_CFG_PATH not set");
+        }
+
+        self.successor_count = vec![0; map_size];
+        for _i in 0..map_size {
+            self.successor_map.push(vec![0; MAX_SUCCESSOR_COUNT]);
+        }
+
+        for edge in &edges {
+            let cnt: usize = self.successor_count[edge.src] as usize;
+            self.successor_map[edge.src][cnt] = edge.dst as u32;
+            self.successor_count[edge.src] += 1;
+        }
+        self.virgin_bits = vec![0xff; map_size];
+        
+        if map_size > MAP_SIZE {
+            self.top_rated = vec![None; map_size];
+            self.global_frontier_bitmap = Bitmap::new(map_size);
+            self.initial_frontier_bitmap = Bitmap::new(map_size);
+            self.local_covered = Bitmap::new(map_size);
         }
     }
 
@@ -1361,7 +1412,7 @@ where
         self.load_cfg();
         assert!(self.successor_count.len() > 0);
         assert!(self.successor_map.len() > 0);
-        self.virgin_bits = vec![0xff; MAP_SIZE];
+        // self.virgin_bits = vec![0xff; MAP_SIZE];
     }
 
     fn is_frontier_node_outer(&self, edge_id: usize) -> bool {
@@ -1959,6 +2010,58 @@ mod test {
         assert_eq!(state.successor_count[6], 1);
         assert_eq!(state.successor_map[0][0], 1);
         assert_eq!(state.successor_map[6][0], 5);
+
+        // recover old env var
+        if old_cfg_path.is_ok() {
+            std::env::set_var(key, old_cfg_path.unwrap());
+        } else {
+            std::env::remove_var(key);
+        }
+
+        // remove the temporay file.
+        std::fs::remove_file(fname).unwrap();
+    }
+
+    #[test]
+    fn test_load_cfg_2() {
+        // create a fake cfg file.
+        use crate::state::HasSetCover;
+        use std::io::Write;
+        use crate::state::MAP_SIZE;
+
+        let fname: &str = "/tmp/tmp_cfg2";
+        let mut fobj: std::fs::File = std::fs::File::create(fname).unwrap();
+        let _ = fobj.write_all(b"0 1\n");
+        let _ = fobj.write_all(b"32768  65535\n");
+        let _ = fobj.sync_all();
+
+        let expected_map_size: usize = 65536;
+        
+        // check that the loadcfg works
+        let mut state: StdState<BytesInput, _, _, _> =
+            StdState::nop::<BytesInput>().expect("couldn't instantiate the test state");
+        assert_eq!(state.global_frontier_bitmap.len(), MAP_SIZE);
+        assert_eq!(state.initial_frontier_bitmap.len(), MAP_SIZE);
+        assert_eq!(state.local_covered.len(), MAP_SIZE);
+
+        let key: &str = "AFL_CFG_PATH";
+        let old_cfg_path = std::env::var(key);
+        std::env::set_var(key, fname);
+
+        state.use_setcover_schedule();
+        assert!(state.use_setcover_scheduling);
+
+        // check that the map size is correct.
+        assert_eq!(state.global_frontier_bitmap.len(), expected_map_size);
+        assert_eq!(state.initial_frontier_bitmap.len(), expected_map_size);
+        assert_eq!(state.local_covered.len(), expected_map_size);
+        assert!(state.virgin_bits.len() == expected_map_size);
+
+        // check the control flow graph.
+        assert_eq!(state.successor_count[0], 1);
+        assert_eq!(state.successor_count[32768], 1);
+        assert_eq!(state.successor_map[0][0], 1);
+        assert_eq!(state.successor_map[32768][0], 65535);
 
         // recover old env var
         if old_cfg_path.is_ok() {
