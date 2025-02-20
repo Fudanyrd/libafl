@@ -50,7 +50,7 @@ use crate::{
 pub const DEFAULT_MAX_SIZE: usize = 1_048_576;
 
 /// map size
-pub const MAP_SIZE: usize = 1 << 10;
+pub const MAP_SIZE: usize = 1 << 18;
 
 /// successor size
 pub const MAX_SUCCESSOR_COUNT: usize = 1024;
