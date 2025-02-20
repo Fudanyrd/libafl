@@ -3,3 +3,6 @@ xml2/
 
 # compiled binaries
 fuzzer_libxml2*
+
+# all fuzzer outputs
+result
