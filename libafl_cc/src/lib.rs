@@ -104,7 +104,7 @@ impl Configuration {
             Configuration::AddressSanitizer => vec!["-fsanitize=address".to_string()],
             Configuration::UndefinedBehaviorSanitizer => vec!["-fsanitize=undefined".to_string()],
             Configuration::GenerateCoverageMap => {
-                vec!["-fsanitize-coverage=trace-pc-guard".to_string()]
+                vec!["-fsanitize-coverage=trace-pc-guard,no-prune".to_string()]
             }
             Configuration::CmpLog => vec!["-fsanitize-coverage=trace-cmp".to_string()],
             Configuration::GenerateCoverageProfile => {
