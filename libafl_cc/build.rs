@@ -291,8 +291,8 @@ pub const LIBAFL_CC_LLVM_VERSION: Option<usize> = None;
         exec_llvm_config(&["--bindir"])
     };
 
-    let clang;
-    let clangcpp;
+    let mut clang;
+    let mut clangcpp;
     let llvm_ar;
 
     if cfg!(windows) {
@@ -303,6 +303,15 @@ pub const LIBAFL_CC_LLVM_VERSION: Option<usize> = None;
         clang = bindir_path.join("clang");
         clangcpp = bindir_path.join("clang++");
         llvm_ar = Path::new(&llvm_ar_path).join("llvm-ar");
+    }
+
+    // Try to get clang, clangpp from env.
+    // If they are set, just use them.
+    if let Ok(clang_env) = env::var("CLANG") {
+        clang = PathBuf::from(clang_env);
+    }
+    if let Ok(clangcpp_env) = env::var("CLANGPP") {
+        clangcpp = PathBuf::from(clangcpp_env);
     }
 
     if !clang.exists() {
