@@ -98,8 +98,10 @@ class DumpCfgPass : public ModulePass {
   DenseMap<BasicBlock *, uint32_t>               bb_to_cur_loc;
   DenseMap<StringRef, BasicBlock *>              entry_bb;
   DenseMap<BasicBlock *, std::vector<StringRef>> calls_in_bb;
+  std::vector<std::string> calls_to_pc_guard;
 
  private:
+  const std::string sancov_pc_guard_name = "__sanitizer_cov_trace_pc_guard";
   bool isLLVMIntrinsicFn(StringRef &n) {
     // Not interested in these LLVM's functions
 #if LLVM_VERSION_MAJOR >= 18
@@ -158,6 +160,19 @@ bool DumpCfgPass::runOnModule(Module &M) {
           if (F) {
             StringRef fname = F->getName();
             if (isLLVMIntrinsicFn(fname)) { continue; }
+
+            if (fname == "__sanitizer_cov_trace_pc_guard") {
+              // add additional info of this func call,
+              // eg. args.
+              std::string arg0;
+              raw_string_ostream OS(arg0);
+              IN.print(OS);
+
+              std::string func_with_arg = arg0;
+              std::cerr << "\033[01;32m[*]\033[0;m" << func_with_arg << std::endl;
+              // fname = func_with_arg;
+              calls_to_pc_guard.push_back(func_with_arg);
+            }
 
             calls_in_bb[&BB].push_back(fname);
           }
@@ -249,6 +264,13 @@ bool DumpCfgPass::runOnModule(Module &M) {
     close(fd);
     std::cerr << "\033[01;32m[+]\033[0;m dump-cfg-pass instrumented " 
       << num_edges << " edges." << std::endl;
+    
+    std::string pc_guard_path = std::string(moduleName) + ".pc";
+    std::ofstream pc_guard_out(pc_guard_path.c_str());
+    for (const auto call : this->calls_to_pc_guard) {
+      pc_guard_out << call << std::endl;
+    }
+    pc_guard_out.close();
   } else {
     FATAL("CFG_OUTPUT_PATH not set!");
   }

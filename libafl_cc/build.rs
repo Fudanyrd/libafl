@@ -293,7 +293,7 @@ pub const LIBAFL_CC_LLVM_VERSION: Option<usize> = None;
 
     let mut clang;
     let mut clangcpp;
-    let llvm_ar;
+    let mut llvm_ar;
 
     if cfg!(windows) {
         clang = bindir_path.join("clang.exe");
@@ -312,6 +312,9 @@ pub const LIBAFL_CC_LLVM_VERSION: Option<usize> = None;
     }
     if let Ok(clangcpp_env) = env::var("CLANGPP") {
         clangcpp = PathBuf::from(clangcpp_env);
+    }
+    if let Ok(llvm_ar_pth) = env::var("LLVM_AR") {
+        llvm_ar = PathBuf::from(llvm_ar_pth);
     }
 
     if !clang.exists() {
@@ -344,7 +347,6 @@ pub const LIBAFL_CC_LLVM_VERSION: Option<usize> = None;
     cxxflags.push(format!("-DEDGES_MAP_DEFAULT_SIZE={edge_map_default_size}"));
 
     // nlohmann include path
-    #[cfg(feature = "cfg-ld")]
     if let Ok(json_path) = std::env::var("JSON_PATH") {
         cxxflags.push(String::from("-I/") + &json_path + &String::from("/include"));
     } else {
@@ -548,7 +550,7 @@ Project Github Repo: https://github.com/nlohmann/json"
         src_dir,
         "dump-cfg-pass.cc",
         None,
-        false,
+        true,
     );
 
     #[cfg(feature = "profiling")]
