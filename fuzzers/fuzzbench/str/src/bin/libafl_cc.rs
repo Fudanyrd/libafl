@@ -17,22 +17,27 @@ pub fn main() {
         dir.pop();
 
         let mut cc = ClangWrapper::new();
-        if let Some(pass_path) = env::var("CFG_GEN_PASS").ok() {
-            cc.add_custom_pass(pass_path.into());
-        } else {
-            panic!("CFG_GEN_PASS not set");
-        }
+        // if let Some(pass_path) = env::var("CFG_GEN_PASS").ok() {
+        //     cc.add_custom_pass(pass_path.into());
+        // } else {
+        //     panic!("CFG_GEN_PASS not set");
+        // }
+        cc.dont_optimize();
         if let Some(code) = cc
             .cpp(is_cpp)
             // silence the compiler wrapper output, needed for some configure scripts.
-            .silence(true)
+            .silence(false)
             .parse_args(&args)
             .expect("Failed to parse the command line")
             .link_staticlib(&dir, "libfuzzer_libstr")
             .add_configuration(Configuration::Compound(vec![
+                Configuration::GenerateCoverageMap,
+            ]))
+            .add_configuration(Configuration::Compound(vec![
                 Configuration::CmpLog,
             ]))
             .add_configuration(Configuration::Compound(vec![
+                Configuration::GenerateCoverageMap,
                 Configuration::AddressSanitizer,
             ]))
             .add_configuration(Configuration::Compound(vec![
