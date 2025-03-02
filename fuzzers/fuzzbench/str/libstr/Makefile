@@ -15,4 +15,4 @@ all: libstr.a
 
 .PHONY: clean
 clean:
-	-rm -f *.o *.a *.cfg
+	-rm -f *.o *.a *.cfg .*.bc
