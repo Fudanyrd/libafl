@@ -2,3 +2,6 @@
 	path = SeedScheduling
 	url = git@github.com:Sweetaroo/SeedScheduling.git
 	branch = v4.30.instrument
+[submodule "json"]
+	path = json
+	url = git@github.com:nlohmann/json.git
