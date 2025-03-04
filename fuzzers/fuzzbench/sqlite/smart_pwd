@@ -2,6 +2,10 @@
 
 if [[ $# -ne 0 ]]; then
   cd $1 && pwd
+  if [[ $? -ne 0 ]]; then
+    echo "Further execution is not possible." 1>&2
+    exit 1
+  fi
 else
   pwd
 fi
