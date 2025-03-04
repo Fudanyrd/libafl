@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::bitmap::{getrand64, popcount8};
+use crate::bitmap::{getrand64, popcount8, BitmapTrait, SparseBitmap};
 
 #[cfg(feature = "std")]
 use libafl_bolts::core_affinity::{CoreId, Cores};
@@ -1464,7 +1464,6 @@ where
     fn update_global_frontier_nodes(&mut self, id: CorpusId) {
         let mut updated_coverage_count: u32 = 0;
         let mut init_count: u32 = 0;
-        let mut real_map_size: usize = 0;
 
         // get number of covered frontier nodes from input
         if true {
@@ -1472,57 +1471,53 @@ where
             let input: &Testcase<I> = input_ref.deref();
 
             init_count = input.covered_frontier_nodes_count().unwrap();
-
-            real_map_size = input.frontier_node_bitmap().unwrap().len();
-            assert!(real_map_size != 0);
         }
 
         let mut count: u32 = 0;
-        for i in 0..(real_map_size / 8) {
-            let mut current: u8 = 0;
-            if true {
-                let input_ref: RefMut<'_, Testcase<I>> =
-                    self.corpus().get(id).unwrap().borrow_mut();
-                current = input_ref
+        {
+            let num_frontier_nodes: usize;
+            {
+                let input_ref = self.corpus().get(id).unwrap().borrow();
+                num_frontier_nodes = input_ref 
                     .deref()
                     .frontier_node_bitmap()
                     .unwrap()
-                    .get_ubyte(i);
-            }
-            if current == 0 {
-                continue;
+                    .indices
+                    .len();
             }
 
-            for bit in 0..(8) {
-                let edge_id: usize = (i * 8) + bit;
-                assert!(edge_id >= (i * 8));
-                if (current & (1 << bit)) != 0 {
-                    assert!(edge_id < real_map_size);
-
-                    if !self.is_frontier_node_outer(edge_id) {
-                        count += 1;
-                        if self.global_frontier_bitmap.get(edge_id) {
-                            self.global_frontier_bitmap.clear(edge_id);
-
-                            self.global_covered_frontier_nodes_count -= 1;
-                        }
-
-                        current = current & !(1 << bit);
+            for i in 0..num_frontier_nodes {
+                let edge_id: usize;
+                // current is true.
+                {
+                    let input_ref = self.corpus().get(id).unwrap().borrow();
+                    edge_id = input_ref 
+                        .deref()
+                        .frontier_node_bitmap()
+                        .unwrap()
+                        .indices[i];
+                }
+    
+                if !self.is_frontier_node_outer(edge_id) {
+                    count += 1;
+                    if self.global_frontier_bitmap.get(edge_id) {
+                        self.global_frontier_bitmap.clear(edge_id);
+                        self.global_covered_frontier_nodes_count -= 1;
+                    }
+    
+                    // clear the bit from bitmap since it is no longer frontier node.
+                    {
+                        let mut input_ref: RefMut<'_, Testcase<I>> =
+                            self.corpus().get(id).unwrap().borrow_mut();
+                        input_ref
+                            .deref_mut()
+                            .frontier_node_bitmap_mut()
+                            .unwrap()
+                            .clear(edge_id);
                     }
                 }
+                updated_coverage_count += 1;
             }
-
-            // frontier_node_bitmap[i] = current;
-            if true {
-                let mut input_ref: RefMut<'_, Testcase<I>> =
-                    self.corpus().get(id).unwrap().borrow_mut();
-                input_ref
-                    .deref_mut()
-                    .frontier_node_bitmap_mut()
-                    .unwrap()
-                    .set_ubyte(i, current);
-            }
-            updated_coverage_count += popcount8(current) as u32;
         }
 
         // q->covered_frontier_nodes_count = updated_coverage_count;
@@ -1549,6 +1544,7 @@ where
         if self.corpus().is_empty() {
             panic!("No seeds in corpus");
         }
+        let popcount_global_frontier_bitmap: usize = self.global_frontier_bitmap.popcount();
 
         let mut fast_seed_exist: bool = false;
         let mut set_covered_seed_list: Vec<CorpusId> = vec![];
@@ -1574,7 +1570,7 @@ where
         // compute execution time statistics,
         // and count the number of seeds
         for it in &all_seeds {
-            // self.update_global_frontier_nodes(*it);
+            self.update_global_frontier_nodes(*it);
 
             let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(*it).unwrap().borrow();
 
@@ -1655,6 +1651,7 @@ where
                     }
                     assert_ne!(len, 0);
 
+                    // update local_covered.
                     for j in 0..(len / 8) {
                         let mut previous: u8 = 0;
                         if true {
@@ -1680,6 +1677,8 @@ where
                 }
 
                 if local_covered_intersection_num == 0 {
+                    // the seed does not bring new coverage.
+                    // skip
                     continue;
                 }
 
@@ -1695,14 +1694,20 @@ where
 
                 if true {
                     let local_covered: &mut Bitmap = &mut self.local_covered;
-                    for j in 0..local_covered.len() / 8 {
-                        let previous: u8 = local_covered.get_ubyte(j);
-                        let global: u8 = self.global_frontier_bitmap.get_ubyte(j);
-
-                        if (!previous) & global == 0 {
-                            all_covered = false;
-                            break;
-                        }
+                    // for j in 0..local_covered.len() / 8 {
+                    //     let local: u8 = local_covered.get_ubyte(j);
+                    //     let global: u8 = self.global_frontier_bitmap.get_ubyte(j);
+                    //     if (!local) & global == 0 {
+                    //         all_covered = false;
+                    //         break;
+                    //     }
+                    // }
+                    
+                    // Optimization from O(L) to O(1):
+                    // if the popcount of local_coverd is less than popcount of global_frontier_bitmap,
+                    // then all_covered cannot be true.
+                    if local_covered.popcount() < popcount_global_frontier_bitmap {
+                        all_covered = false;
                     }
                 }
 
@@ -1749,7 +1754,7 @@ where
 
                         let input: &mut Testcase<I> = input_ref.deref_mut();
 
-                        let frontier_bitmap: &mut Bitmap =
+                        let frontier_bitmap: &mut SparseBitmap =
                             input.frontier_node_bitmap_mut().unwrap();
                         frontier_bitmap.set(edge_id);
 
@@ -1973,6 +1978,7 @@ impl<I> HasScalabilityMonitor for NopState<I> {
 #[cfg(test)]
 mod test {
     use crate::{inputs::BytesInput, state::StdState};
+    use crate::bitmap::BitmapTrait;
 
     #[test]
     fn test_std_state() {
