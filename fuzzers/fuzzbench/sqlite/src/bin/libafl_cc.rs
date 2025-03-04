@@ -20,8 +20,6 @@ pub fn main() {
         dir.pop();
 
         let mut cc = ClangWrapper::new();
-        let cfg_gen_pass = env::var("CFG_GEN_PASS").unwrap();
-        cc.add_custom_pass(cfg_gen_pass.into());
         if let Some(code) = cc
             .cpp(is_cpp)
             // silence the compiler wrapper output, needed for some configure scripts.
@@ -30,9 +28,13 @@ pub fn main() {
             .expect("Failed to parse the command line")
             .link_staticlib(&dir, FUZZER_LIB_NAME)
             .add_configuration(Configuration::Compound(vec![
+                Configuration::GenerateCoverageMap,
+            ]))
+            .add_configuration(Configuration::Compound(vec![
                 Configuration::CmpLog,
             ]))
             .add_configuration(Configuration::Compound(vec![
+                Configuration::GenerateCoverageMap,
                 Configuration::AddressSanitizer,
             ]))
             .add_configuration(Configuration::Compound(vec![

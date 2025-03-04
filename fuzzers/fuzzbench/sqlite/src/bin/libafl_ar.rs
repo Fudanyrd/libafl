@@ -12,9 +12,13 @@ pub fn main() {
             .parse_args(&args)
             .expect("Failed to parse the command line")
             .add_configuration(Configuration::Compound(vec![
+                Configuration::GenerateCoverageMap,
+            ]))
+            .add_configuration(Configuration::Compound(vec![
                 Configuration::CmpLog,
             ]))
             .add_configuration(Configuration::Compound(vec![
+                Configuration::GenerateCoverageMap,
                 Configuration::AddressSanitizer,
             ]))
             .add_configuration(Configuration::Compound(vec![
