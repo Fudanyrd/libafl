@@ -50,7 +50,7 @@ use crate::{
 pub const DEFAULT_MAX_SIZE: usize = 1_048_576;
 
 /// map size
-pub const MAP_SIZE: usize = 1 << 17;
+pub const MAP_SIZE: usize = 1 << 16;
 
 /// favored corpus
 static mut FAVORED_CORPUS: Vec<CorpusId> = vec![];
@@ -1388,6 +1388,8 @@ where
             panic!("AFL_CFG_PATH not set");
         }
 
+        println!("Map size: {}", map_size);
+
         self.successor_count = vec![0; map_size];
         for _i in 0..map_size {
             self.successor_map.push(vec![0; MAX_SUCCESSOR_COUNT]);
@@ -1753,6 +1755,7 @@ where
     /// Update bitmap score.
     fn update_bitmap_score(&mut self, trace_bits: Vec<u8>, id: CorpusId) {
         let trace_len: usize = trace_bits.len();
+        // println!("Trace bits {}", trace_bits.len());
 
         for i in 0..trace_len {
             let bit: u8 = trace_bits[i];

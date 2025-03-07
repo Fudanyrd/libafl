@@ -4,6 +4,7 @@ import csv
 import sys
 import json
 import os
+import subprocess
 
 if __name__ == "__main__":
   if len(sys.argv) != 2:
@@ -90,7 +91,21 @@ if __name__ == "__main__":
       for succ in basic_blocks[i]:
         output_edges.append([i + off, succ + off])
   
+  result = subprocess.run(
+f"""
+  readelf -S {prefix} 2> /dev/null | grep \"sancov_pc\" -A 1 | tail -n 1 | sed -E \"s/0*([a-fA-F0-9]+).*/\\1/\"
+""",
+    shell=True,
+    capture_output=True,
+  )
+
+  assert result.returncode == 0, "Something went wrong. Abort"
+  n_edges = int(result.stdout.decode(), base=16)
+  n_edges = n_edges // 16
+
   # ok, write output to cfg file.
   with open(prefix + "_cfg", 'w') as fobj:
     for edge in output_edges:
       fobj.write(f"{edge[0]} {edge[1]}\n")
+
+    fobj.write(f"{n_edges} {n_edges}\n")
