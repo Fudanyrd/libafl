@@ -50,7 +50,10 @@ use crate::{
 pub const DEFAULT_MAX_SIZE: usize = 1_048_576;
 
 /// map size
-pub const MAP_SIZE: usize = 1 << 18;
+pub const MAP_SIZE: usize = 1 << 17;
+
+/// favored corpus
+static mut FAVORED_CORPUS: Vec<CorpusId> = vec![];
 
 /// successor size
 pub const MAX_SUCCESSOR_COUNT: usize = 1024;
@@ -1370,7 +1373,9 @@ where
                         map_size = dst + 1;
                     }
 
-                    edges.push(ControlFlowGraphEdge { src, dst });
+                    if src != dst {
+                        edges.push(ControlFlowGraphEdge { src, dst });
+                    }
 
                     // let cnt: usize = self.successor_count[src] as usize;
                     // self.successor_map[src][cnt] = dst as u32;
@@ -1540,6 +1545,24 @@ where
     /// Perform seed reduction.
     fn setcover_reduction(&mut self) {
         assert!(self.use_setcover_scheduling);
+
+        unsafe {
+            if !FAVORED_CORPUS.is_empty() {
+                let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(FAVORED_CORPUS.pop().unwrap());
+                return;
+            }
+        }
+
+        let real_map_size = self.global_frontier_bitmap.len();
+        for i in 0..real_map_size {
+            if self.global_frontier_bitmap.get(i) {
+                if !self.is_frontier_node_outer(i) {
+                    self.global_frontier_bitmap.clear(i);
+                    self.global_covered_frontier_nodes_count -= 1;
+                }
+            }
+        }
+
         self.local_covered.clear_all();
         if self.corpus().is_empty() {
             panic!("No seeds in corpus");
@@ -1547,8 +1570,8 @@ where
         let popcount_global_frontier_bitmap: usize = self.global_frontier_bitmap.popcount();
 
         let mut fast_seed_exist: bool = false;
+        let mut fast_seed_count: usize = 0;
         let mut set_covered_seed_list: Vec<CorpusId> = vec![];
-        let mut set_covered_fast_seed_list: Vec<CorpusId> = vec![];
 
         let mut unselected_seeds: Vec<CorpusId> = vec![];
         let mut all_seeds: Vec<CorpusId> = vec![];
@@ -1567,10 +1590,15 @@ where
             all_seeds.push(it);
         }
 
+        if true {
+            use rand::seq::SliceRandom;
+            all_seeds.shuffle(&mut rand::thread_rng());
+        }
+
         // compute execution time statistics,
         // and count the number of seeds
         for it in &all_seeds {
-            self.update_global_frontier_nodes(*it);
+            // self.update_global_frontier_nodes(*it);
 
             let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(*it).unwrap().borrow();
 
@@ -1596,12 +1624,6 @@ where
             }
         }
 
-        // shuffle unselected seeds.
-        if true {
-            use rand::seq::SliceRandom;
-            unselected_seeds.shuffle(&mut rand::thread_rng());
-        }
-
         // compute mean and standard deviation
         let corpus_count_f: f64 = self.corpus().count() as f64;
         let mean_exec_us: f64 = (total_exec_us - max_exec_us) / (corpus_count_f - 1.0);
@@ -1611,8 +1633,10 @@ where
 
         if unselected_seeds_count == 0 {
             // randomly select one from all seeds.
-            let random_idx: usize = getrand64() % all_seeds.len();
-            let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(all_seeds[random_idx]);
+            let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(all_seeds.pop().unwrap());
+            unsafe {
+                FAVORED_CORPUS.extend_from_slice(all_seeds.as_slice());
+            }
         } else {
             assert_eq!(unselected_seeds_count, unselected_seeds.len() as u32);
 
@@ -1651,29 +1675,24 @@ where
                     }
                     assert_ne!(len, 0);
 
-                    // update local_covered.
-                    for j in 0..(len / 8) {
-                        let mut previous: u8 = 0;
-                        if true {
-                            previous = self.local_covered.get_ubyte(j);
-                        }
-
-                        let mut current: u8 = 0;
-
-                        if true {
-                            let seed_ref: Ref<'_, Testcase<I>> =
+                    let frontier_node_bitmap: Vec<usize>;
+                    {
+                        let seed_ref: Ref<'_, Testcase<I>> =
                                 self.corpus().get(seed_index).unwrap().borrow();
-                            let reduction_seed: &Testcase<I> = seed_ref.deref();
-                            current = reduction_seed.frontier_node_bitmap().unwrap().get_ubyte(j);
-                        }
+                        let reduction_seed: &Testcase<I> = seed_ref.deref();    
+                        frontier_node_bitmap = reduction_seed.frontier_node_bitmap().unwrap().indices.clone();
+                    }
 
-                        if true {
-                            let local_covered: &mut Bitmap = &mut self.local_covered;
-                            local_covered.set_ubyte(j, previous | current);
-                            local_covered_intersection_num +=
-                                popcount8(local_covered.get_ubyte(j) & (!previous)) as u32;
+                    for edge in frontier_node_bitmap {
+                        // mark this frontier node as covered. 
+                        let previous = self.local_covered.get(edge);
+
+                        self.local_covered.set(edge);
+                        if !previous {
+                            local_covered_intersection_num += 1;
                         }
                     }
+
                 }
 
                 if local_covered_intersection_num == 0 {
@@ -1686,7 +1705,7 @@ where
                 set_covered_seed_list.push(seed_index);
                 if exec_time < mean_exec_us + 1.0 * stddev_exec_us {
                     fast_seed_exist = true;
-                    set_covered_fast_seed_list.push(seed_index);
+                    fast_seed_count += 1;
                 }
 
                 // check whether all frontier nodes are covered.
@@ -1712,25 +1731,19 @@ where
                 }
 
                 // update the number of fast seeds.
-                if true {
-                    let count_fast = set_covered_fast_seed_list.len();
-                    self.corpus_mut().set_fast(count_fast);
+                if fast_seed_exist {
+                    self.corpus_mut().set_fast(fast_seed_count);
+                } else {
+                    self.corpus_mut().set_fast(0);
                 }
-                if all_covered {
-                    if fast_seed_exist {
-                        // randomly select one of the fast seed.
-                        let random_idx: usize = getrand64() % set_covered_fast_seed_list.len();
-                        let _ret: Result<(), Error> = self
-                            .corpus_mut()
-                            .set_favored_id(set_covered_fast_seed_list[random_idx]);
-                    } else {
-                        // randomly select one of the seed.
-                        let random_idx: usize = getrand64() % set_covered_seed_list.len();
-                        let _ret: Result<(), Error> = self
-                            .corpus_mut()
-                            .set_favored_id(set_covered_seed_list[random_idx]);
+                if all_covered || unselected_seeds_count == 0 {
+                    unsafe {
+                        FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
                     }
 
+                    unsafe {
+                        let _ret = self.corpus_mut().set_favored_id(FAVORED_CORPUS.pop().unwrap());
+                    }
                     break;
                 }
             }
