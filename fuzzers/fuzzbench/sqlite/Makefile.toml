@@ -112,7 +112,7 @@ dependencies = ["lib", "cxx", "cc", "harness_obj"]
 [tasks.cfg]
 script_runner = "@shell"
 script = '''
-  cd ${PROJECT_DIR} && ./build_cfg.sh ${FUZZER_NAME}.coverage
+  cd ${PROJECT_DIR} && ./build_cfg.sh ${FUZZER_NAME}.coverage_asan
 '''
 dependencies = ["fuzzer"]
 
@@ -120,6 +120,6 @@ dependencies = ["fuzzer"]
 description = "Runs the fuzzer."
 script_runner = '@shell'
 script = '''
-AFL_CFG_PATH=${PROJECT_DIR}/fuzzer_ossfuzz_sancov_cfg ./fuzzer_ossfuzz.asan --input ${PROJECT_DIR}/input --cores 0
+AFL_CFG_PATH=${PROJECT_DIR}/${FUZZER_NAME}.coverage_asan_cfg ./fuzzer_ossfuzz.asan --input ${PROJECT_DIR}/input --cores 0
 '''
 dependencies = ["fuzzer", "cfg"]
