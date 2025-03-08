@@ -1550,7 +1550,9 @@ where
 
         unsafe {
             if !FAVORED_CORPUS.is_empty() {
-                let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(FAVORED_CORPUS.pop().unwrap());
+                let selected_id: CorpusId = FAVORED_CORPUS.pop().unwrap();
+                let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(selected_id);
+                self.update_global_frontier_nodes(selected_id);
                 return;
             }
         }
