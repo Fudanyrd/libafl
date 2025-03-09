@@ -1,6 +1,6 @@
 # Variables
 [env]
-FUZZER_NAME = 'fuzzer_ip6'
+FUZZER_NAME = 'fuzzer_shape'
 CARGO_TARGET_DIR = { value = "${PROJECT_DIR}/target", condition = { env_not_set = [
   "CARGO_TARGET_DIR",
 ] } }
@@ -34,10 +34,17 @@ dependencies = ["cc"]
 condition = { files_not_exist = ["${LIBAFL_AR}"] }
 dependencies = ["cc"]
 
-# download source code of xml2
+# download source code
 [tasks.source]
-condition = { files_not_exist = ["${PROJECT_DIR}/openthread"]}
+condition = { files_not_exist = ["${PROJECT_DIR}/harfbuzz"]}
 script_runner = "@shell"
 script = '''
 git clone https://github.com/harfbuzz/harfbuzz.git --depth 1 || rm -rf openthread
 '''
+
+[tasks.lib]
+script_runner = "@shell"
+script = '''
+cd ${PROJECT_DIR} && ./build_lib.sh
+'''
+dependencies = ["cc", "cxx", "ar"]

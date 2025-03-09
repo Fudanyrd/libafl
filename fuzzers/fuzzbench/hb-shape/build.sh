@@ -10,4 +10,4 @@ LLVM_DIS=/usr/bin/llvm-dis-15 \
 LLVM_AR_NAME=/usr/bin/llvm-ar-15 \
 LLVM_LINK_NAME=/usr/bin/llvm-link-15 \
 OPT=/usr/bin/opt-15 \
-	cargo make cfg 
+	cargo make lib 
