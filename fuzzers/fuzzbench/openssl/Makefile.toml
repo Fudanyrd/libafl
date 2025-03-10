@@ -15,19 +15,9 @@ LIBAFL_LIBTOOL = '${CARGO_TARGET_DIR}/${PROFILE}/libafl_libtool'
 FUZZER = '${CARGO_TARGET_DIR}/${PROFILE_DIR}/${FUZZER_NAME}'
 LIB = '${PROJECT_DIR}/openssl/libssl.a'
 PROJECT_DIR = { script = ["pwd"] }
-JSON_PATH = { value = "" }
 CFG_LD = { value = "" }
 PROJECT_ROOT_DIR = { script = ["${PROJECT_DIR}/smart_pwd ${PROJECT_DIR}/../../.."] }
-CFG_GEN_PASS = { value = "${PROJECT_ROOT_DIR}/SeedScheduling/SanitizerCoveragePCGUARD.so", condition = { env_not_set = ["CFG_GEN_PASS"] } }
-
-[tasks.instrumentation]
-condition = { files_not_exist = ["${CFG_GEN_PASS}"]}
-script_runner = "@shell"
-script = '''
-cd ${PROJECT_ROOT_DIR}/SeedScheduling
-make
-ls ${CFG_GEN_PASS}
-'''
+JSON_PATH = { script = ["${PROJECT_DIR}/smart_pwd ${PROJECT_DIR}/../../../json/"], condition = { env_not_set = ["JSON_PATH"] } }
 
 # should be set in the environment if libafl_cc
 # is built with the `cfg-ld` feature enabled
@@ -48,7 +38,7 @@ script_runner = "@shell"
 script = '''
 JSON_PATH=${JSON_PATH} cargo build --profile ${PROFILE}
 '''
-dependencies = ["instrumentation"]
+dependencies = []
 
 [tasks.cxx]
 dependencies = ["cc"]
@@ -62,33 +52,52 @@ script_runner = "@shell"
 script = '''
 cd ${PROJECT_DIR}/openssl
 CC=${LIBAFL_CC} CXX=${LIBAFL_CXX} AR=${LIBAFL_AR} ./config --debug enable-fuzz-libfuzzer -DPEDANTIC -DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION no-shared enable-tls1_3 enable-rc5 enable-md2 enable-ec_nistp_64_gcc_128 enable-ssl3 enable-ssl3-method enable-nextprotoneg enable-weak-ssl-ciphers -fno-sanitize=alignment
-make LDCMD="${LIBAFL_CC}" CC=${LIBAFL_CC} CXX=${LIBAFL_CXX} AR=${LIBAFL_AR}
+make LDCMD="${LIBAFL_CXX}" CC=${LIBAFL_CC} CXX=${LIBAFL_CXX} AR=${LIBAFL_AR}
 '''
 dependencies = ["cc", "cxx", "ar", "source"]
 
 [tasks.harness_obj]
+command = "${LIBAFL_CXX}"
+args = [
+  "-g", "-O0", "-m64",  "-Wall",
+  "-fno-sanitize=alignment", "-fno-omit-frame-pointer",
+  "-I${PROJECT_DIR}/openssl/include",
+  "-I${PROJECT_DIR}/openssl/fuzz",
+  "-DOPENSSL_BUILDING_OPENSSL",
+  "-DFUZZING_BUILD_MODE_UNSAFE_FOR_PRODUCTION",
+  "-DPEDANTIC",
+  "-c",
+  "${PROJECT_DIR}/harness.cc",
+  "-o",
+  "${PROJECT_DIR}/harness.o",
+]
 dependencies = ["cxx", "cc", "lib"]
 
 [tasks.fuzzer]
 script_runner = "@shell"
-script = '''
-cp ${PROJECT_DIR}/openssl/fuzz/asn1 ${PROJECT_DIR}/${FUZZER_NAME}
-cp ${PROJECT_DIR}/openssl/fuzz/asn1.asan ${PROJECT_DIR}/${FUZZER_NAME}.asan
-'''
-dependencies = ["lib"]
+command = "${LIBAFL_CXX}"
+args = [
+  "-pthread", "-m64", "-g", "-O0", "-Wall",
+  "-fno-sanitize=alignment", "-fno-omit-frame-pointer",
+  "-o", "${FUZZER_NAME}",
+  "${PROJECT_DIR}/harness.o",
+  "${PROJECT_DIR}/openssl/fuzz/x509-test-bin-fuzz_rand.o",
+  "${PROJECT_DIR}/openssl/libcrypto.a", "-ldl", "-lpthread",
+]
+dependencies = ["lib", "harness_obj"]
 
 [tasks.cfg]
-command = "../gen_graph.py"
-args = [
-  "${PROJECT_DIR}/${FUZZER_NAME}.asan",
-]
+script_runner = "@shell"
+script = '''
+  cd ${PROJECT_DIR} && ./build_cfg.sh ${FUZZER_NAME}.coverage
+'''
 dependencies = ["fuzzer"]
 
 [tasks.run]
 description = "Runs the fuzzer."
 script_runner = '@shell'
 script = '''
-AFL_CFG_PATH=${PROJECT_DIR}/fuzzer_openssl_sancov_cfg ./fuzzer_openssl.asan --input ${PROJECT_DIR}/input --cores 0
+AFL_CFG_PATH=${PROJECT_DIR}/${FUZZER_NAME}.coverage_asan_cfg ./${FUZZER_NAME}.asan --input ${PROJECT_DIR}/input --cores 0
 '''
 dependencies = ["fuzzer", "cfg"]
 
@@ -107,7 +116,7 @@ args = ["-C", "openssl", "clean"]
 category = "Cleanup"
 script_runner = "@shell"
 script = '''
-rm -f ${PROJECT_DIR}/*.o ${PROJECT_DIR}/*.cfg ${PROJECT_DIR}/*.csv ${PROJECT_DIR}/fuzzer_openssl*
+rm -f ${PROJECT_DIR}/*.o ${PROJECT_DIR}/*.cfg ${PROJECT_DIR}/*.csv ${PROJECT_DIR}/fuzzer_openssl* ${PROJECT_DIR}/.*.bc
 '''
 
 [tasks.full_clean]
