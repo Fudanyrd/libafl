@@ -1422,6 +1422,7 @@ where
         // self.virgin_bits = vec![0xff; MAP_SIZE];
     }
 
+    #[inline(always)]
     fn is_frontier_node_outer(&self, edge_id: usize) -> bool {
         let num_successors: u32 = self.successor_count[edge_id];
         if num_successors <= 1 {
@@ -1552,7 +1553,7 @@ where
             if !FAVORED_CORPUS.is_empty() {
                 let selected_id: CorpusId = FAVORED_CORPUS.pop().unwrap();
                 let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(selected_id);
-                self.update_global_frontier_nodes(selected_id);
+                // self.update_global_frontier_nodes(selected_id);
                 return;
             }
         }
@@ -1649,7 +1650,7 @@ where
                 // for unselected seeds are already shuffled,
                 // we can just use the last one.
                 let random_idx: usize = (unselected_seeds_count - 1) as usize;
-                let seed_index: CorpusId = all_seeds[random_idx];
+                let seed_index: CorpusId = unselected_seeds[random_idx];
                 let mut exec_time: f64 = DEFAULT_EXEC_TIME_US;
 
                 // compute execution time, use default value if not available.
@@ -1667,7 +1668,6 @@ where
                 // decrement size of unselected seeds,
                 // move the last element to the current position.
                 unselected_seeds_count -= 1;
-                unselected_seeds[random_idx] = unselected_seeds[unselected_seeds_count as usize];
 
                 let mut local_covered_intersection_num: u32 = 0;
                 // compute local_covered_intersection_num.
