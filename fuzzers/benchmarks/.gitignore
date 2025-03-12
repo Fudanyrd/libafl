@@ -1,0 +1,8 @@
+sqlite
+fuzzer_ossfuzz*
+
+xml2
+fuzzer_xml2*
+
+openssl
+*.bc
