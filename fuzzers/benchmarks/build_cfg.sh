@@ -23,4 +23,4 @@ cat "$1".ll.pc | \
   sed -E "s/.*@__sancov_gen_(.*) to i64\), i64 ([0-9]+).*/@__sancov_gen_\1, \2/g" | \
   sed -E "s/.*@__sancov_gen_(.*)\).*/@__sancov_gen_\1, 0/g" >> "$1".csv
 
-python3 ../gen_graph.py $1
+python3 ./gen_graph.py $1
