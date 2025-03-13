@@ -343,7 +343,7 @@ impl<I> Testcase<I> {
         }
 
         self.use_setcover = true;
-        self.frontier_node_bitmap = Some(SparseBitmap::new(crate::state::MAP_SIZE));
+        self.frontier_node_bitmap = Some(SparseBitmap::new(unsafe { crate::state::MAP_SIZE }));
         return Ok(());
     }
 

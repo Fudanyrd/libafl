@@ -50,10 +50,13 @@ use crate::{
 pub const DEFAULT_MAX_SIZE: usize = 1_048_576;
 
 /// map size
-pub const MAP_SIZE: usize = 1 << 16;
+pub static mut MAP_SIZE: usize = 1 << 16;
 
 /// favored corpus
 static mut FAVORED_CORPUS: Vec<CorpusId> = vec![];
+
+/// frontier node bitmap changed
+static mut MAP_CHANGED: bool = false;
 
 /// successor size
 pub const MAX_SUCCESSOR_COUNT: usize = 1024;
@@ -1276,9 +1279,9 @@ where
             phantom: PhantomData,
             #[cfg(feature = "std")]
             multicore_inputs_processed: None,
-            global_frontier_bitmap: Bitmap::new(MAP_SIZE),
-            initial_frontier_bitmap: Bitmap::new(MAP_SIZE),
-            local_covered: Bitmap::new(MAP_SIZE),
+            global_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
+            initial_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
+            local_covered: Bitmap::new(unsafe { MAP_SIZE }),
             recent_frontier_count: 0,
             global_covered_frontier_nodes_count: 0,
             covered_fast_seed_list_counter: 0,
@@ -1291,7 +1294,7 @@ where
             successor_map: vec![],   // init in load_cfg()
             successor_count: vec![], // init in load_cfg()
             virgin_bits: vec![],     // init in load_cfg()
-            top_rated: vec![None; MAP_SIZE], // maybe resized in load_cfg()
+            top_rated: vec![None; unsafe { MAP_SIZE }], // maybe resized in load_cfg()
         };
         feedback.init_state(&mut state)?;
         objective.init_state(&mut state)?;
@@ -1328,7 +1331,7 @@ where
 {
     fn load_cfg(&mut self) {
         // auto detect the minimum size of map.
-        let mut map_size = MAP_SIZE;
+        let mut map_size = unsafe { MAP_SIZE };
         let mut edges: Vec<ControlFlowGraphEdge> = vec![];
         // self.successor_count = vec![0; MAP_SIZE];
         // for _i in 0..MAP_SIZE {
@@ -1402,11 +1405,15 @@ where
         }
         self.virgin_bits = vec![0xff; map_size];
         
-        if map_size > MAP_SIZE {
+        if map_size > unsafe { MAP_SIZE } {
             self.top_rated = vec![None; map_size];
             self.global_frontier_bitmap = Bitmap::new(map_size);
             self.initial_frontier_bitmap = Bitmap::new(map_size);
             self.local_covered = Bitmap::new(map_size);
+
+            unsafe {
+                MAP_SIZE = map_size;
+            }
         }
     }
 
@@ -1551,10 +1558,16 @@ where
 
         unsafe {
             if !FAVORED_CORPUS.is_empty() {
-                let selected_id: CorpusId = FAVORED_CORPUS.pop().unwrap();
-                let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(selected_id);
-                // self.update_global_frontier_nodes(selected_id);
-                return;
+                if !MAP_CHANGED {
+                    let selected_id: CorpusId = FAVORED_CORPUS.pop().unwrap();
+                    let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(selected_id);
+                    // self.update_global_frontier_nodes(selected_id);
+                    return;
+                } else {
+                    // dicards previous selected seeds.
+                    FAVORED_CORPUS.clear();
+                    MAP_CHANGED = false;
+                }
             }
         }
 
@@ -1786,6 +1799,7 @@ where
                         let global_frontier_bitmap: &mut Bitmap = &mut self.global_frontier_bitmap;
                         if !global_frontier_bitmap.get(edge_id) {
                             global_frontier_bitmap.set(edge_id);
+                            unsafe { MAP_CHANGED = true };
                             self.global_covered_frontier_nodes_count += 1;
                         }
                     }
@@ -2019,17 +2033,20 @@ mod test {
         // check that the loadcfg works
         let mut state: StdState<BytesInput, _, _, _> =
             StdState::nop::<BytesInput>().expect("couldn't instantiate the test state");
-        assert_eq!(state.global_frontier_bitmap.len(), MAP_SIZE);
-        assert_eq!(state.initial_frontier_bitmap.len(), MAP_SIZE);
-        assert_eq!(state.local_covered.len(), MAP_SIZE);
+        
+        let mut map_size: usize = unsafe { MAP_SIZE };
+        assert_eq!(state.global_frontier_bitmap.len(), map_size);
+        assert_eq!(state.initial_frontier_bitmap.len(), map_size);
+        assert_eq!(state.local_covered.len(), map_size);
 
         let key: &str = "AFL_CFG_PATH";
         let old_cfg_path = std::env::var(key);
         std::env::set_var(key, fname);
 
         state.use_setcover_schedule();
+        map_size = unsafe { MAP_SIZE };
         assert!(state.use_setcover_scheduling);
-        assert!(state.virgin_bits.len() == MAP_SIZE);
+        assert!(state.virgin_bits.len() == map_size);
         assert_eq!(state.successor_count[0], 1);
         assert_eq!(state.successor_count[6], 1);
         assert_eq!(state.successor_map[0][0], 1);
@@ -2064,9 +2081,10 @@ mod test {
         // check that the loadcfg works
         let mut state: StdState<BytesInput, _, _, _> =
             StdState::nop::<BytesInput>().expect("couldn't instantiate the test state");
-        assert_eq!(state.global_frontier_bitmap.len(), MAP_SIZE);
-        assert_eq!(state.initial_frontier_bitmap.len(), MAP_SIZE);
-        assert_eq!(state.local_covered.len(), MAP_SIZE);
+        let map_size = unsafe { MAP_SIZE };
+        assert_eq!(state.global_frontier_bitmap.len(), map_size);
+        assert_eq!(state.initial_frontier_bitmap.len(), map_size);
+        assert_eq!(state.local_covered.len(), map_size);
 
         let key: &str = "AFL_CFG_PATH";
         let old_cfg_path = std::env::var(key);
