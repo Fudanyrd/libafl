@@ -149,6 +149,13 @@ pub extern "C" fn libafl_main() {
         env::current_dir().unwrap().to_string_lossy().to_string()
     );
 
+    let stdout_file: String;
+    if let Ok(file_name) = env::var("STDOUT_FILE") {
+        stdout_file = file_name;
+    } else {
+        stdout_file = "/dev/null".into();
+    }
+
     let shmem_provider = StdShMemProvider::new().expect("Failed to init shared memory");
 
     let mut fobj = File::create("./fuzzer_stats.csv").expect("Failed to create fuzzer_stats.toml");
@@ -299,7 +306,7 @@ pub extern "C" fn libafl_main() {
         .overcommit(opt.overcommit)
         .broker_port(broker_port)
         .remote_broker_addr(opt.remote_broker_addr)
-        .stdout_file(Some("./a.log"))
+        .stdout_file(Some(&stdout_file))
         .build()
         .launch()
     {
