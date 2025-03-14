@@ -282,6 +282,9 @@ mod tests {
 
         bitmap.set_ubyte(0, 0x47);
         assert_eq!(bitmap.popcount(), popcount8(0x47) as usize);
+
+        bitmap.clear_all();
+        assert_eq!(bitmap.popcount(), 0);
     }
 
     #[test]
@@ -306,6 +309,9 @@ mod tests {
 
         bitmap.set_ubyte(0, 0x47);
         assert_eq!(bitmap.popcount(), popcount8(0x47) as usize);
+
+        bitmap.clear_all();
+        assert_eq!(bitmap.popcount(), 0);
     }
 
     #[test]
