@@ -167,6 +167,7 @@ impl BitmapTrait for Bitmap {
 
     fn clear_all(&mut self) {
         self.buf.fill(0);
+        self.popcnt = 0;
     }
 }
 
