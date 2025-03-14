@@ -75,7 +75,6 @@ pub struct Testcase<I> {
     hit_objectives: Vec<Cow<'static, str>>,
     /// frontier node bitmap(optional)
     frontier_node_bitmap: Option<SparseBitmap>,
-    covered_frontier_nodes: u32,
 }
 
 impl<I> HasMetadata for Testcase<I> {
@@ -252,7 +251,6 @@ impl<I> Testcase<I> {
             #[cfg(feature = "track_hit_feedbacks")]
             hit_objectives: Vec::new(),
             frontier_node_bitmap: None,
-            covered_frontier_nodes: 0,
         }
     }
 
@@ -279,7 +277,6 @@ impl<I> Testcase<I> {
             #[cfg(feature = "track_hit_feedbacks")]
             hit_objectives: Vec::new(),
             frontier_node_bitmap: None,
-            covered_frontier_nodes: 0,
         }
     }
 
@@ -306,7 +303,6 @@ impl<I> Testcase<I> {
             #[cfg(feature = "track_hit_feedbacks")]
             hit_objectives: Vec::new(),
             frontier_node_bitmap: None,
-            covered_frontier_nodes: 0,
         }
     }
 
@@ -374,7 +370,7 @@ impl<I> Testcase<I> {
     /// Get the number of frontier nodes that are covered
     pub fn covered_frontier_nodes_count(&self) -> Result<u32, Error> {
         if self.use_setcover {
-            return Ok(self.covered_frontier_nodes);
+            return Ok(self.frontier_node_bitmap.as_ref().unwrap().popcount() as u32);
         } else {
             return Err(Error::Unsupported(
                 "Setcover schedule is not supported for OnDiskCorpus".into(),
@@ -384,9 +380,8 @@ impl<I> Testcase<I> {
     }
 
     /// Set the number of frontier nodes that are covered
-    pub fn set_covered_frontier_nodes_count(&mut self, count: u32) -> Result<(), Error> {
+    pub fn set_covered_frontier_nodes_count(&mut self, _count: u32) -> Result<(), Error> {
         if self.use_setcover {
-            self.covered_frontier_nodes = count;
             return Ok(());
         } else {
             return Err(Error::Unsupported(
@@ -429,7 +424,6 @@ impl<I> Default for Testcase<I> {
             hit_objectives: Vec::new(),
             use_setcover: false,
             frontier_node_bitmap: None,
-            covered_frontier_nodes: 0,
         }
     }
 }

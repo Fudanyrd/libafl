@@ -17,6 +17,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[allow(unused_imports)]
 use crate::bitmap::{getrand64, popcount8, BitmapTrait, SparseBitmap};
 
 #[cfg(feature = "std")]
@@ -356,10 +357,6 @@ pub struct StdState<I, C, R, SC> {
     global_frontier_bitmap: Bitmap,
     initial_frontier_bitmap: Bitmap,
     local_covered: Bitmap,
-    recent_frontier_count: u32,
-    global_covered_frontier_nodes_count: u32,
-    covered_seed_list_counter: u32,
-    covered_fast_seed_list_counter: u32,
     use_setcover_scheduling: bool,
     removed_frontier_found: bool,
     new_frontier_found: bool,
@@ -1282,10 +1279,6 @@ where
             global_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
             initial_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
             local_covered: Bitmap::new(unsafe { MAP_SIZE }),
-            recent_frontier_count: 0,
-            global_covered_frontier_nodes_count: 0,
-            covered_fast_seed_list_counter: 0,
-            covered_seed_list_counter: 0,
             new_frontier_found: false,
             removed_frontier_found: false,
             global_frontier_updated: false,
@@ -1517,7 +1510,6 @@ where
                     count += 1;
                     if self.global_frontier_bitmap.get(edge_id) {
                         self.global_frontier_bitmap.clear(edge_id);
-                        self.global_covered_frontier_nodes_count -= 1;
                     }
     
                     // clear the bit from bitmap since it is no longer frontier node.
@@ -1543,7 +1535,7 @@ where
                 .deref_mut()
                 .set_covered_frontier_nodes_count(updated_coverage_count);
         }
-        if self.global_covered_frontier_nodes_count == 0 {
+        if self.global_frontier_bitmap.popcount() == 0 {
             println!(
                 "Seed id {}, initial count {}, count {}",
                 id, init_count, count
@@ -1576,7 +1568,6 @@ where
             if self.global_frontier_bitmap.get(i) {
                 if !self.is_frontier_node_outer(i) {
                     self.global_frontier_bitmap.clear(i);
-                    self.global_covered_frontier_nodes_count -= 1;
                 }
             }
         }
@@ -1595,8 +1586,6 @@ where
         let mut all_seeds: Vec<CorpusId> = vec![];
 
         let mut unselected_seeds_count: u32 = 0;
-        self.covered_seed_list_counter = 0;
-        self.covered_fast_seed_list_counter = 0;
 
         let mut total_exec_us: f64 = 0.0;
         let mut total_exec_us_sq: f64 = 0.0;
@@ -1754,6 +1743,7 @@ where
                     self.corpus_mut().set_fast(0);
                 }
                 if all_covered || unselected_seeds_count == 0 {
+                    assert!(all_covered);
                     unsafe {
                         FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
                     }
@@ -1800,7 +1790,6 @@ where
                         if !global_frontier_bitmap.get(edge_id) {
                             global_frontier_bitmap.set(edge_id);
                             unsafe { MAP_CHANGED = true };
-                            self.global_covered_frontier_nodes_count += 1;
                         }
                     }
                 }
