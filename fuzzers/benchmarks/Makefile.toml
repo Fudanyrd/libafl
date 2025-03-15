@@ -10,6 +10,7 @@ PROFILE_DIR = { source = "${PROFILE}", default_value = "release", mapping = { "r
 LIBAFL_CC = '${CARGO_TARGET_DIR}/${PROFILE_DIR}/libafl_cc'
 LIBAFL_CXX = '${CARGO_TARGET_DIR}/${PROFILE}/libafl_cxx'
 LIBAFL_AR = '${CARGO_TARGET_DIR}/${PROFILE}/libafl_ar'
+LIB_FUZZER = '${CARGO_TARGET_DIR}/${PROFILE}/liblibfuzzer.a'
 LIBAFL_LIBTOOL = '${CARGO_TARGET_DIR}/${PROFILE}/libafl_libtool'
 PROJECT_DIR = { script = ["pwd"] }
 PROJECT_ROOT_DIR = { script = ["${PROJECT_DIR}/smart_pwd ${PROJECT_DIR}/../.."] }
@@ -40,6 +41,10 @@ dependencies = ["cc"]
 
 [tasks.ar]
 condition = { files_not_exist = ["${LIBAFL_AR}"] }
+dependencies = ["cc"]
+
+[tasks.libfuzzer]
+condition = { files_not_exist = ["${LIB_FUZZER}"] }
 dependencies = ["cc"]
 
 [tasks.fuzzer_ossfuzz]
@@ -78,6 +83,26 @@ args = [
 ]
 dependencies = ["cc", "cxx", "ar"]
 
+[tasks.clean_openssl]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/openssl.mk", "clean",
+]
+
+[tasks.fuzzer_bloaty]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/bloaty.mk", "all",
+  "CC=${LIBAFL_CC}", "CXX=${LIBAFL_CXX}", "AR=${LIBAFL_AR}",
+  "LIB_FUZZER=",
+]
+dependencies = ["cc", "cxx", "ar", "libfuzzer"]
+
+[tasks.clean_bloaty]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/bloaty.mk", "clean",
+]
 
 [tasks.clean_lib]
 dependencies = ["clean_ossfuzz", "clean_xml2", "clean_openssl"]
