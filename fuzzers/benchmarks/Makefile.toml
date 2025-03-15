@@ -104,6 +104,15 @@ args = [
   "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/bloaty.mk", "clean",
 ]
 
+[tasks.fuzzer_freetype2]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/freetype2.mk", "all",
+  "CC=${LIBAFL_CC}", "CXX=${LIBAFL_CXX}", "AR=${LIBAFL_AR}",
+  "LIB_FUZZER=",
+]
+dependencies = ["cc", "cxx", "ar", "libfuzzer"]
+
 [tasks.clean_lib]
 dependencies = ["clean_ossfuzz", "clean_xml2", "clean_openssl"]
 
