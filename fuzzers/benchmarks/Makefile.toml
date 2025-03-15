@@ -128,6 +128,21 @@ args = [
   "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/hb-shape.mk", "clean",
 ]
 
+[tasks.fuzzer_json]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/json.mk", "all",
+  "CC=${LIBAFL_CC}", "CXX=${LIBAFL_CXX}", "AR=${LIBAFL_AR}",
+  "LIB_FUZZER=",
+]
+dependencies = ["cc", "cxx", "ar", "libfuzzer"]
+
+[tasks.clean_json]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/json.mk", "clean",
+]
+
 [tasks.clean_lib]
 dependencies = ["clean_ossfuzz", "clean_xml2", "clean_openssl"]
 

@@ -1,3 +1,5 @@
+result
+
 sqlite
 fuzzer_ossfuzz*
 
@@ -5,4 +7,21 @@ xml2
 fuzzer_xml2*
 
 openssl
+fuzzer_openssl*
 *.bc
+
+bloaty
+fuzzer_bloaty*
+
+curl
+curl-fuzzer
+curl-deps
+curl-install
+fuzzer_curl*
+
+freetype2
+
+json
+fuzzer_json*
+
+fuzzer_stats.csv
