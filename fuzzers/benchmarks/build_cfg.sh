@@ -14,7 +14,7 @@ CFG_OUTPUT_PATH=$PWD $CLANG -c -Xclang -load \
 
 # parse the ll for the order of each guard.
 cat "$1".ll | \
-  grep "compiler" | \
+  grep "@llvm.compiler.used" | \
   sed  -E "s/.*\[(.*)\].*/\1/" | \
   sed "s/ptr //g" > "$1".csv
 
