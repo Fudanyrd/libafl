@@ -143,6 +143,19 @@ args = [
   "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/json.mk", "clean",
 ]
 
+### re2
+[tasks.fuzzer_re2]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/re2.mk", "all",
+  "CC=${LIBAFL_CC}", "CXX=${LIBAFL_CXX}", "AR=${LIBAFL_AR}",
+  "LIB_FUZZER=",
+]
+dependencies = ["cc", "cxx", "ar", "libfuzzer"]
+
+
+### FIXME
+
 [tasks.clean_lib]
 dependencies = ["clean_ossfuzz", "clean_xml2", "clean_openssl"]
 
