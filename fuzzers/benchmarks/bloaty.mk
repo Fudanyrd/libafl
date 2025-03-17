@@ -38,7 +38,7 @@ fuzzer: lib
 
 .PHONY: cfg 
 cfg: fuzzer
-	@./build_cfg.sh ./bloaty/build/fuzz_target.coverage_asan
+	@./build_cfg.sh ./bloaty/build/fuzz_target
 
 .PHONY: clean
 clean:
