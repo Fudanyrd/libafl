@@ -34,4 +34,8 @@ fuzzer_re2*
 zlib-fuzz 
 fuzzer_libz*
 
+proj 
+proj-install
+fuzzer_proj*
+
 fuzzer_stats.csv

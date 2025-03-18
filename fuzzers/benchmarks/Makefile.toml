@@ -185,6 +185,22 @@ args = [
   "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/libz.mk", "clean"
 ]
 
+### proj4
+[tasks.fuzzer_proj]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/proj.mk", "all",
+  "CC=${LIBAFL_CC}", "CXX=${LIBAFL_CXX}", "AR=${LIBAFL_AR}",
+  "LIB_FUZZER=",
+]
+dependencies = ["cc", "cxx", "ar", "libfuzzer"]
+
+[tasks.clean_proj]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/proj.mk", "clean"
+]
+
 ### FIXME
 
 [tasks.clean_lib]
