@@ -7,7 +7,7 @@ INCLUDES=-I./re2 -I./re2/abseil-cpp/
 DEFS=
 PWD=$(shell pwd)
 
-all: lib
+all: cfg
 
 re2:
 	@git clone https://github.com/google/re2.git
@@ -50,5 +50,14 @@ lib: re2/build/libre2.a
 re2.o: fuzzer/re2.cc
 	${CXX} ${CFLAGS} ${INCLUDES} ${DEFS} -c fuzzer/re2.cc -o re2.o
 
-fuzzer_re2:	re2/build/libre2.a re2.o 
-	${CXX} ${LDFLAGS} ./re2/build/libre2.a re2.o -o fuzzer_re2 
+fuzzer_re2:	re2/build/libre2.a re2.o
+	${CXX} ${LDFLAGS} re2.o ./re2/build/libre2.a $(shell find -wholename ./re2/build/abseil-cpp/*.o) \
+	-o fuzzer_re2 
+
+.PHONY: cfg 
+cfg: fuzzer_re2 
+	@./build_cfg.sh fuzzer_re2
+
+.PHONY: clean
+clean:
+	-rm -rf ./re2/build re2.o fuzzer_re2*
