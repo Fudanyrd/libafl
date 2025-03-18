@@ -153,6 +153,21 @@ args = [
 ]
 dependencies = ["cc", "cxx", "ar", "libfuzzer"]
 
+[tasks.clean_re2]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/re2.mk", "clean",
+]
+
+### curl
+[tasks.fuzzer_curl]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/curl.mk", "all",
+  "CC=${LIBAFL_CC}", "CXX=${LIBAFL_CXX}", "AR=${LIBAFL_AR}",
+  "LIB_FUZZER=",
+]
+dependencies = ["cc", "cxx", "ar", "libfuzzer"]
 
 ### FIXME
 

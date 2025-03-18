@@ -33,8 +33,8 @@ fuzzer: $(FUZZER)
 
 .PHONY: cfg 
 cfg: ${FUZZER}
-	@cp ${FUZZER}.coverage_asan ./fuzzer_hbshape.coverage_asan
-	@./build_cfg.sh ./fuzzer_hbshape.coverage_asan
+	@cp ${FUZZER} ./fuzzer_hbshape
+	@./build_cfg.sh ./fuzzer_hbshape
 
 .PHONY: clean 
 clean:
