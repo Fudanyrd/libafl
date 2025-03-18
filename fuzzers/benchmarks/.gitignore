@@ -14,14 +14,24 @@ bloaty
 fuzzer_bloaty*
 
 curl
-curl-fuzzer
+curl_fuzzer
 curl-deps
-curl-install
+curl_install
 fuzzer_curl*
+zlib
 
 freetype2
 
+harfbuzz
+fuzzer_hbshape*
+
 json
 fuzzer_json*
+
+re2
+fuzzer_re2*
+
+zlib-fuzz 
+fuzzer_libz*
 
 fuzzer_stats.csv
