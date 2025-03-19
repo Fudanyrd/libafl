@@ -44,16 +44,16 @@ sqlite/build/harness.o: lib
 fuzzer_ossfuzz: sqlite/build/harness.o sqlite/build/libsqlite3.a 
 	@${CXX} ${LDFLAGS} sqlite/build/harness.o sqlite/build/libsqlite3.a -o fuzzer_ossfuzz
 
-fuzzer_ossfuzz.coverage_asan_cfg: fuzzer_ossfuzz
-	@./build_cfg.sh fuzzer_ossfuzz.coverage_asan
+fuzzer_ossfuzz_cfg: fuzzer_ossfuzz
+	@./build_cfg.sh fuzzer_ossfuzz
 
 .PHONY: fuzzer 
 fuzzer: fuzzer_ossfuzz
 	@ls fuzzer_ossfuzz
 
 .PHONY: cfg
-cfg: fuzzer_ossfuzz.coverage_asan_cfg
-	@ls fuzzer_ossfuzz.coverage_asan_cfg
+cfg: fuzzer_ossfuzz_cfg
+	@ls fuzzer_ossfuzz_cfg
 
 all: cfg
 

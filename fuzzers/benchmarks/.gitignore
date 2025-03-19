@@ -38,4 +38,10 @@ proj
 proj-install
 fuzzer_proj*
 
+libpcap
+tcpdump
+build
+nghttp2
+fuzzer_pcap
+
 fuzzer_stats.csv

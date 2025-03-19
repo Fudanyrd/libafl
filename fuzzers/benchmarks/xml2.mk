@@ -39,12 +39,12 @@ fuzzer_xml2: xml2.o xml2/.libs/libxml2.a
 fuzzer:
 	@ls fuzzer_xml2
 
-fuzzer_xml2.coverage_asan_cfg: fuzzer_xml2
-	@./build_cfg.sh fuzzer_xml2.coverage_asan
+fuzzer_xml2_cfg: fuzzer_xml2
+	@./build_cfg.sh fuzzer_xml2
 
 .PHONY: cfg
-cfg: fuzzer_xml2.coverage_asan_cfg
-	@ls fuzzer_xml2.coverage_asan_cfg
+cfg: fuzzer_xml2_cfg
+	@ls fuzzer_xml2_cfg
 
 all: cfg
 

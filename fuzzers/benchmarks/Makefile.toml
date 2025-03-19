@@ -201,6 +201,22 @@ args = [
   "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/proj.mk", "clean"
 ]
 
+### libpcap
+[tasks.fuzzer_pcap]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/pcap.mk", "all",
+  "CC=${LIBAFL_CC}", "CXX=${LIBAFL_CXX}", "AR=${LIBAFL_AR}",
+  "LIB_FUZZER=",
+]
+dependencies = ["cc", "cxx", "ar", "libfuzzer"]
+
+[tasks.clean_pcap]
+command = "make"
+args = [
+  "-C", "${PROJECT_DIR}", "-f", "${PROJECT_DIR}/pcap.mk", "clean"
+]
+
 ### FIXME
 
 [tasks.clean_lib]
