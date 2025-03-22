@@ -90,7 +90,10 @@ impl Configuration {
     /// Get compiler flags for this `Configuration`
     pub fn to_flags(&self) -> Result<Vec<String>, Error> {
         Ok(match self {
-            Configuration::Default => vec![],
+            Configuration::Default => vec![
+                "-fsanitize=address".to_string(),
+                "-fsanitize-coverage=trace-pc-guard,pc-table,no-prune".to_string(),
+            ],
             // hardware asan is more memory efficient than asan on arm64
             #[cfg(all(
                 any(target_os = "linux", target_os = "android"),
@@ -223,6 +226,11 @@ pub trait ToolWrapper {
 
     /// Add a `Configuration`
     fn add_configuration(&mut self, configuration: Configuration) -> &'_ mut Self;
+
+    /// Change the default configuration
+    fn change_configuration(&mut self, configuration: Configuration) -> &'_ mut Self {
+        self
+    }
 
     /// Command to run the compiler
     fn command(&mut self) -> Result<Vec<String>, Error>;
