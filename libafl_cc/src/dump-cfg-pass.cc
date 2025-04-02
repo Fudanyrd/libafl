@@ -169,7 +169,7 @@ bool DumpCfgPass::runOnModule(Module &M) {
               IN.print(OS);
 
               std::string func_with_arg = arg0;
-              std::cerr << "\033[01;32m[*]\033[0;m" << func_with_arg << std::endl;
+              // std::cerr << "\033[01;32m[*]\033[0;m" << func_with_arg << std::endl;
               // fname = func_with_arg;
               calls_to_pc_guard.push_back(func_with_arg);
             }
