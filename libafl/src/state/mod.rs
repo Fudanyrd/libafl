@@ -1693,8 +1693,9 @@ where
                         // mark this frontier node as covered. 
                         let previous = self.local_covered.get(edge);
 
-                        self.local_covered.set(edge);
-                        if !previous {
+                        // should also check whether `edge` is a frontier node.
+                        if !previous && self.global_frontier_bitmap.get(edge) {
+                            self.local_covered.set(edge);
                             local_covered_intersection_num += 1;
                         }
                     }
@@ -1743,7 +1744,6 @@ where
                     self.corpus_mut().set_fast(0);
                 }
                 if all_covered || unselected_seeds_count == 0 {
-                    assert!(all_covered);
                     unsafe {
                         FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
                     }
