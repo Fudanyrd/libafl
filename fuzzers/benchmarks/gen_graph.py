@@ -103,9 +103,21 @@ f"""
   n_edges = int(result.stdout.decode(), base=16)
   n_edges = n_edges // 16
 
+  overflow = False
+  for edge in output_edges:
+    if edge[0] >= n_edges or edge[1] >= n_edges:
+      #print("Invalid CFG. Abort", file=sys.stderr)
+      #sys.exit(1)
+      overflow = True
+      break
+  
+  if overflow:
+    print("\033[01;31mWarning:\033[0;m overflowed edges", file=sys.stderr)
+
   # ok, write output to cfg file.
   with open(prefix + "_cfg", 'w') as fobj:
     for edge in output_edges:
-      fobj.write(f"{edge[0]} {edge[1]}\n")
+      if edge[0] < n_edges and edge[1] < n_edges:
+        fobj.write(f"{edge[0]} {edge[1]}\n")
 
     fobj.write(f"{n_edges} {n_edges}\n")
