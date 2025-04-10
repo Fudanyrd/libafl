@@ -15,6 +15,7 @@ use std::io::BufRead;
 use std::{
     fs,
     path::{Path, PathBuf},
+    io::Write,
 };
 
 #[allow(unused_imports)]
@@ -67,6 +68,21 @@ pub const MAX_NODE_PER_SEED: usize = 1000;
 
 /// default execution time: 0.5s
 pub const DEFAULT_EXEC_TIME_US: f64 = 500_000.0;
+
+/// file object
+static mut FOBJ: Option<fs::File> = None;// fs::File::create("state.csv").expect("failed to create state.csv");
+
+/// Size of Sample
+static mut SAMPLE_SIZE: usize = 1;
+
+/// Frequency of sampling
+const SAMPLE_FREQ: usize = 1_00;
+
+/// a simple csv logger
+// static mut CSV_LOGGER: *mut fs::File = std::ptr::null_mut();
+
+/// fast seed count
+pub static mut FAST_SEED_COUNT: usize = 0x0;
 
 /// The [`State`] of the fuzzer.
 /// Contains all important information about the current run.
@@ -369,6 +385,7 @@ pub struct StdState<I, C, R, SC> {
     virgin_bits: Vec<u8>,
     /// Top entries for bitmap bytes
     top_rated: Vec<Option<CorpusId>>,
+
     // FIXME: These are probably unused.
     // recent_frontier_nodes: Vec<u32>,
     // frontier_discovery_time: Vec<u32>,
@@ -1250,6 +1267,22 @@ where
         C: Serialize + DeserializeOwned,
         SC: Serialize + DeserializeOwned,
     {
+
+        unsafe {
+            if !FOBJ.as_mut().is_some() {
+                let mut fobj: fs::File = fs::File::create("state.csv").expect("failed to create state.csv");
+                FOBJ = Some(fobj);
+            }
+
+            writeln!(
+                FOBJ.as_mut().unwrap(),
+                "fast_corpus_size, all_corpus_size, setcover_size",
+            )
+            .expect("failed to write first line");
+
+            FOBJ.as_mut().unwrap().sync_all().expect("failed to sync state logging");
+        }
+ 
         let mut state = Self {
             rand,
             executions: 0,
@@ -1646,6 +1679,7 @@ where
             }
         } else {
             assert_eq!(unselected_seeds_count, unselected_seeds.len() as u32);
+            let mut setcover_size: usize = 0;
 
             while unselected_seeds_count > 0 {
                 // randomly sample a seed.
@@ -1708,6 +1742,8 @@ where
                     continue;
                 }
 
+                setcover_size += 1;
+
                 // record in the seed list and fast seed list.
                 set_covered_seed_list.push(seed_index);
                 if exec_time < mean_exec_us + 1.0 * stddev_exec_us {
@@ -1737,7 +1773,27 @@ where
                     }
                 }
 
+
+                // if unsafe {CSV_LOGGER} != std::ptr::null_mut() {
+                //     let mut fileref = unsafe { CSV_LOGGER.as_ref().unwrap() };
+                //     writeln!(
+                //         fileref,
+                //         "{}, {}",
+                //         fast_seed_count, 
+                //         corpus_count_f as usize,
+                //     )
+                //     .expect("failed to log to csv.");
+
+                //     fileref.sync_all().expect("failed to sync csv.");
+                // } else {
+                //     assert!(false);
+                // }
+
                 // update the number of fast seeds.
+                unsafe {
+                    FAST_SEED_COUNT += fast_seed_count;
+                    // assert!(FAST_SEED_COUNT == 0);
+                }
                 if fast_seed_exist {
                     self.corpus_mut().set_fast(fast_seed_count);
                 } else {
@@ -1754,6 +1810,26 @@ where
                     break;
                 }
             }
+
+            // log into csv file.
+            unsafe {
+                // should satisfy sample frequency
+                if SAMPLE_SIZE % SAMPLE_FREQ == 0 {
+                    writeln!(
+                        FOBJ.as_mut().unwrap(),
+                        "{}, {}, {}",
+                        fast_seed_count, 
+                        corpus_count_f as usize,
+                        setcover_size
+                    )
+                    .expect("failed to log to csv.");
+    
+                    FOBJ.as_mut().unwrap().sync_all().expect("failed to sync csv.");
+                }
+
+                SAMPLE_SIZE += 1;
+            }
+
         }
     }
 

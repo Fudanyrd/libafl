@@ -12,6 +12,7 @@ use libafl_bolts::{current_time, format_duration_hms, ClientId};
 use serde_json::json;
 
 use crate::monitors::{ClientStats, Monitor, NopMonitor};
+use crate::state::FAST_SEED_COUNT;
 
 /// Wrap a monitor and log the current state of the monitor into a Toml file.
 #[derive(Debug, Clone)]
