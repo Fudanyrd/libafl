@@ -355,6 +355,7 @@ pub struct StdState<I, C, R, SC> {
     phantom: PhantomData<I>,
     /// needed by our setcover method.
     global_frontier_bitmap: Bitmap,
+    global_frontier_bitmap_searched: Bitmap,
     initial_frontier_bitmap: Bitmap,
     local_covered: Bitmap,
     use_setcover_scheduling: bool,
@@ -1277,6 +1278,7 @@ where
             #[cfg(feature = "std")]
             multicore_inputs_processed: None,
             global_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
+            global_frontier_bitmap_searched: Bitmap::new(unsafe { MAP_SIZE} ),
             initial_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
             local_covered: Bitmap::new(unsafe { MAP_SIZE }),
             new_frontier_found: false,
@@ -1401,6 +1403,7 @@ where
         if map_size > unsafe { MAP_SIZE } {
             self.top_rated = vec![None; map_size];
             self.global_frontier_bitmap = Bitmap::new(map_size);
+            self.global_frontier_bitmap_searched = Bitmap::new(map_size);
             self.initial_frontier_bitmap = Bitmap::new(map_size);
             self.local_covered = Bitmap::new(map_size);
 
@@ -1647,6 +1650,8 @@ where
         } else {
             assert_eq!(unselected_seeds_count, unselected_seeds.len() as u32);
 
+            let mut covered_not_searched_seeds: Vec<CorpusId> = vec![];
+
             while unselected_seeds_count > 0 {
                 // randomly sample a seed.
                 // for unselected seeds are already shuffled,
@@ -1654,6 +1659,7 @@ where
                 let random_idx: usize = (unselected_seeds_count - 1) as usize;
                 let seed_index: CorpusId = unselected_seeds[random_idx];
                 let mut exec_time: f64 = DEFAULT_EXEC_TIME_US;
+                let mut covered_unsearched = false;
 
                 // compute execution time, use default value if not available.
                 if true {
@@ -1697,6 +1703,11 @@ where
                         if !previous && self.global_frontier_bitmap.get(edge) {
                             self.local_covered.set(edge);
                             local_covered_intersection_num += 1;
+
+                            if !self.global_frontier_bitmap_searched.get(edge) {
+                                self.global_frontier_bitmap_searched.set(edge);
+                                covered_unsearched = true;
+                            }
                         }
                     }
 
@@ -1713,6 +1724,10 @@ where
                 if exec_time < mean_exec_us + 1.0 * stddev_exec_us {
                     fast_seed_exist = true;
                     fast_seed_count += 1;
+                }
+
+                if covered_unsearched {
+                    covered_not_searched_seeds.push(seed_index);
                 }
 
                 // check whether all frontier nodes are covered.
@@ -1745,7 +1760,11 @@ where
                 }
                 if all_covered || unselected_seeds_count == 0 {
                     unsafe {
-                        FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
+                        if covered_not_searched_seeds.is_empty() {
+                            FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
+                        } else {
+                            FAVORED_CORPUS.extend_from_slice(covered_not_searched_seeds.as_slice());
+                        }
                     }
 
                     unsafe {
