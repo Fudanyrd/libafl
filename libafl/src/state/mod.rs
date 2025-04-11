@@ -1630,11 +1630,6 @@ where
             all_seeds.push(it);
         }
 
-        if true {
-            use rand::seq::SliceRandom;
-            all_seeds.shuffle(&mut rand::thread_rng());
-        }
-
         // compute execution time statistics,
         // and count the number of seeds
         for it in &all_seeds {
@@ -1682,70 +1677,56 @@ where
             let mut setcover_size: usize = 0;
 
             while unselected_seeds_count > 0 {
-                // randomly sample a seed.
-                // for unselected seeds are already shuffled,
-                // we can just use the last one.
-                let random_idx: usize = (unselected_seeds_count - 1) as usize;
-                let seed_index: CorpusId = unselected_seeds[random_idx];
+                let mut seed_index: Option<CorpusId> = None;
                 let mut exec_time: f64 = DEFAULT_EXEC_TIME_US;
+                let mut intersection_count: usize = 0;
 
-                // compute execution time, use default value if not available.
-                if true {
-                    let seed_ref: Ref<'_, Testcase<I>> =
-                        self.corpus().get(seed_index).unwrap().borrow();
-                    let reduction_seed: &Testcase<I> = seed_ref.deref();
+                // implement the greedy setcover algorithm.
+                for i in 0..unselected_seeds.len() {
+                    let it: CorpusId = unselected_seeds[i];
+                    let mut count: usize = 0;
+                    let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(it).unwrap().borrow();
+                    let input: &Testcase<I> = input_ref.deref();
+                    
 
-                    let exec_time_opt: &Option<Duration> = reduction_seed.exec_time();
-                    if exec_time_opt != &None {
-                        exec_time = exec_time_opt.unwrap().as_micros() as f64;
-                    }
-                }
-
-                // decrement size of unselected seeds,
-                // move the last element to the current position.
-                unselected_seeds_count -= 1;
-
-                let mut local_covered_intersection_num: u32 = 0;
-                // compute local_covered_intersection_num.
-                if true {
-                    let mut len: usize = 0;
-                    if true {
-                        let local_covered: &mut Bitmap = &mut self.local_covered;
-                        len = local_covered.len();
-                    }
-                    assert_ne!(len, 0);
-
-                    let frontier_node_bitmap: Vec<usize>;
-                    {
-                        let seed_ref: Ref<'_, Testcase<I>> =
-                                self.corpus().get(seed_index).unwrap().borrow();
-                        let reduction_seed: &Testcase<I> = seed_ref.deref();    
-                        frontier_node_bitmap = reduction_seed.frontier_node_bitmap().unwrap().indices.clone();
-                    }
-
-                    for edge in frontier_node_bitmap {
-                        // mark this frontier node as covered. 
-                        let previous = self.local_covered.get(edge);
-
-                        // should also check whether `edge` is a frontier node.
-                        if !previous && self.global_frontier_bitmap.get(edge) {
-                            self.local_covered.set(edge);
-                            local_covered_intersection_num += 1;
+                    for edge in &input.frontier_node_bitmap().unwrap().indices {
+                        if self.global_frontier_bitmap.get(*edge) && 
+                         (!self.local_covered.get(*edge)) {
+                            count += 1;
                         }
                     }
 
+                    if count > intersection_count || (!seed_index.is_some()) {
+                        intersection_count = count;
+                        seed_index = Some(it);
+                    }
                 }
 
-                if local_covered_intersection_num == 0 {
-                    // the seed does not bring new coverage.
-                    // skip
-                    continue;
-                }
+                assert!(seed_index.is_some());
 
-                setcover_size += 1;
+                // update local covered bitmap.
+                let new_nodes: Vec<usize>;
+                {
+                    let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(seed_index.unwrap()).unwrap().borrow();
+                    let input: &Testcase<I> = input_ref.deref();
+                    new_nodes = input.frontier_node_bitmap().unwrap().indices.clone();
+
+                    // update execution time.
+                    if input.exec_time().is_some() {
+                        exec_time = input.exec_time().unwrap().as_micros() as f64;
+                    }
+                }
+                {
+                    for node in new_nodes {
+                        if self.global_frontier_bitmap.get(node) {
+                            self.local_covered.set(node);
+                        }
+                    }
+                }
 
                 // record in the seed list and fast seed list.
-                set_covered_seed_list.push(seed_index);
+                set_covered_seed_list.push(seed_index.unwrap());
+                setcover_size += 1;
                 if exec_time < mean_exec_us + 1.0 * stddev_exec_us {
                     fast_seed_exist = true;
                     fast_seed_count += 1;
@@ -1773,32 +1754,17 @@ where
                     }
                 }
 
-
-                // if unsafe {CSV_LOGGER} != std::ptr::null_mut() {
-                //     let mut fileref = unsafe { CSV_LOGGER.as_ref().unwrap() };
-                //     writeln!(
-                //         fileref,
-                //         "{}, {}",
-                //         fast_seed_count, 
-                //         corpus_count_f as usize,
-                //     )
-                //     .expect("failed to log to csv.");
-
-                //     fileref.sync_all().expect("failed to sync csv.");
-                // } else {
-                //     assert!(false);
-                // }
-
-                // update the number of fast seeds.
+                // collect seed executino time statistics
                 unsafe {
                     FAST_SEED_COUNT += fast_seed_count;
-                    // assert!(FAST_SEED_COUNT == 0);
                 }
                 if fast_seed_exist {
                     self.corpus_mut().set_fast(fast_seed_count);
                 } else {
                     self.corpus_mut().set_fast(0);
                 }
+
+                // update seed candidates
                 if all_covered || unselected_seeds_count == 0 {
                     unsafe {
                         FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
