@@ -1677,7 +1677,7 @@ where
             let mut setcover_size: usize = 0;
 
             while unselected_seeds_count > 0 {
-                let mut seed_index: Option<CorpusId> = None;
+                let mut seed_index: Option<usize> = None;
                 let mut exec_time: f64 = DEFAULT_EXEC_TIME_US;
                 let mut intersection_count: usize = 0;
 
@@ -1698,7 +1698,7 @@ where
 
                     if count > intersection_count || (!seed_index.is_some()) {
                         intersection_count = count;
-                        seed_index = Some(it);
+                        seed_index = Some(i);
                     }
                 }
 
@@ -1707,7 +1707,8 @@ where
                 // update local covered bitmap.
                 let new_nodes: Vec<usize>;
                 {
-                    let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(seed_index.unwrap()).unwrap().borrow();
+                    let seed_id: CorpusId = unselected_seeds[seed_index.unwrap()];
+                    let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(seed_id).unwrap().borrow();
                     let input: &Testcase<I> = input_ref.deref();
                     new_nodes = input.frontier_node_bitmap().unwrap().indices.clone();
 
@@ -1724,8 +1725,16 @@ where
                     }
                 }
 
+                // remove the seed from unselected.
+                {
+                    set_covered_seed_list.push(unselected_seeds[seed_index.unwrap()]);
+                    let l = unselected_seeds.len();
+                    assert!(l > 0);
+                    unselected_seeds[seed_index.unwrap()] = unselected_seeds[l - 1];
+                    let _ret = unselected_seeds.pop();
+                }
+
                 // record in the seed list and fast seed list.
-                set_covered_seed_list.push(seed_index.unwrap());
                 setcover_size += 1;
                 if exec_time < mean_exec_us + 1.0 * stddev_exec_us {
                     fast_seed_exist = true;
