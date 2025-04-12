@@ -1800,12 +1800,9 @@ where
                     self.corpus_mut().set_fast(0);
                 }
                 if all_covered || unselected_seeds_count == 0 {
-                    unsafe {
-                        FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
-                    }
-
-                    unsafe {
-                        let _ret = self.corpus_mut().set_favored_id(FAVORED_CORPUS.pop().unwrap());
+                    {
+                        let idx = getrand64() % set_covered_seed_list.len();
+                        let _ret = self.corpus_mut().set_favored_id(set_covered_seed_list[idx]);
                     }
                     break;
                 }
