@@ -371,6 +371,7 @@ pub struct StdState<I, C, R, SC> {
     phantom: PhantomData<I>,
     /// needed by our setcover method.
     global_frontier_bitmap: Bitmap,
+    global_frontier_bitmap_searched: Bitmap,
     initial_frontier_bitmap: Bitmap,
     local_covered: Bitmap,
     use_setcover_scheduling: bool,
@@ -1310,6 +1311,7 @@ where
             #[cfg(feature = "std")]
             multicore_inputs_processed: None,
             global_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
+            global_frontier_bitmap_searched: Bitmap::new(unsafe { MAP_SIZE }),
             initial_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
             local_covered: Bitmap::new(unsafe { MAP_SIZE }),
             new_frontier_found: false,
@@ -1434,6 +1436,7 @@ where
         if map_size > unsafe { MAP_SIZE } {
             self.top_rated = vec![None; map_size];
             self.global_frontier_bitmap = Bitmap::new(map_size);
+            self.global_frontier_bitmap_searched = Bitmap::new(map_size);
             self.initial_frontier_bitmap = Bitmap::new(map_size);
             self.local_covered = Bitmap::new(map_size);
 
@@ -1675,24 +1678,34 @@ where
         } else {
             assert_eq!(unselected_seeds_count, unselected_seeds.len() as u32);
             let mut setcover_size: usize = 0;
+            let mut covered_new_seed_list: Vec<CorpusId> = vec![];
 
             while unselected_seeds_count > 0 {
                 let mut seed_index: Option<usize> = None;
                 let mut exec_time: f64 = DEFAULT_EXEC_TIME_US;
                 let mut intersection_count: usize = 0;
+                let mut covered_new_seed = false;
 
                 // implement the greedy setcover algorithm.
                 for i in 0..unselected_seeds.len() {
-                    let it: CorpusId = unselected_seeds[i];
+                    let indices: Vec<usize>;
                     let mut count: usize = 0;
-                    let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(it).unwrap().borrow();
-                    let input: &Testcase<I> = input_ref.deref();
+                    {
+                        let it: CorpusId = unselected_seeds[i];
+                        let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(it).unwrap().borrow();
+                        let input: &Testcase<I> = input_ref.deref();
+                        indices = input.frontier_node_bitmap().unwrap().indices.clone();
+                    }
                     
-
-                    for edge in &input.frontier_node_bitmap().unwrap().indices {
-                        if self.global_frontier_bitmap.get(*edge) && 
-                         (!self.local_covered.get(*edge)) {
+                    for edge in indices {
+                        let globl = self.global_frontier_bitmap.get(edge);
+                        if globl && (!self.local_covered.get(edge)) {
                             count += 1;
+                        }
+
+                        if globl && (!self.global_frontier_bitmap_searched.get(edge)) {
+                            covered_new_seed = true;
+                            self.global_frontier_bitmap_searched.set(edge);
                         }
                     }
 
@@ -1711,6 +1724,10 @@ where
                     let input_ref: Ref<'_, Testcase<I>> = self.corpus().get(seed_id).unwrap().borrow();
                     let input: &Testcase<I> = input_ref.deref();
                     new_nodes = input.frontier_node_bitmap().unwrap().indices.clone();
+
+                    if covered_new_seed {
+                        covered_new_seed_list.push(seed_id);
+                    }
 
                     // update execution time.
                     if input.exec_time().is_some() {
@@ -1776,7 +1793,11 @@ where
                 // update seed candidates
                 if all_covered || unselected_seeds_count == 0 {
                     unsafe {
-                        FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
+                        if covered_new_seed_list.is_empty() {
+                            FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
+                        } else {
+                            FAVORED_CORPUS.extend_from_slice(covered_new_seed_list.as_slice());
+                        }
                     }
 
                     unsafe {
