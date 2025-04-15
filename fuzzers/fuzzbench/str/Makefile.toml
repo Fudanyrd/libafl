@@ -30,7 +30,7 @@ ls ${CFG_GEN_PASS}
 # should be set in the environment if libafl_cc
 # is built with the `cfg-ld` feature enabled
 
-# CFG_LD = { value = "/home/liuyu/LibAFL/libafl_cc/src/cfg-ld.py", condition = { env_not_set = ["CFG_LD"] } }
+# CFG_LD = { value = "/home/anonymous/LibAFL/libafl_cc/src/cfg-ld.py", condition = { env_not_set = ["CFG_LD"] } }
 
 # This project does not have to obtain source code from the internet.
 

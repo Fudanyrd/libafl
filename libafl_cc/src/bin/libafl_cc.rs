@@ -17,7 +17,7 @@ pub fn main() {
         dir.pop();
 
         let mut cc = ClangWrapper::new();
-        cc.add_pass(LLVMPasses::DumpCfg); //.add_custom_pass("/home/liuyu/SeedScheduling/SanitizerCoveragePCGUARD.so".into());
+        cc.add_pass(LLVMPasses::DumpCfg); //.add_custom_pass("/home/anonymous/SeedScheduling/SanitizerCoveragePCGUARD.so".into());
         cc.add_pass(LLVMPasses::CoverageAccounting);
         if let Some(code) = cc
             .cpp(is_cpp)

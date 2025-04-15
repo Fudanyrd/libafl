@@ -21,7 +21,7 @@ JSON_PATH = { script = ["${PROJECT_DIR}/smart_pwd ${PROJECT_DIR}/../../../json/"
 # required if need libafl_cc's dump-cfg-pass
 # CFG_LD = { value = "../../../libafl_cc/src/cfg-ld.py", condition = { env_not_set = ["CFG_LD"] } }
 # required if need libafl_cc's dump-cfg-pass
-# JSON_PATH = { value = "/home/liuyu/json", conditioin = { env_not_set = ["JSON_PATH"] } }
+# JSON_PATH = { value = "/home/anonymous/json", conditioin = { env_not_set = ["JSON_PATH"] } }
 
 # check that env vars are set as expected.
 [tasks.check_env]

@@ -22,8 +22,8 @@ JSON_PATH = { script = ["${PROJECT_DIR}/smart_pwd ${PROJECT_DIR}/../../../json/"
 # should be set in the environment if libafl_cc
 # is built with the `cfg-ld` feature enabled
 
-# JSON_PATH = { value = "/home/liuyu/json", conditioin = { env_not_set = ["JSON_PATH"] } }
-# CFG_LD = { value = "/home/liuyu/LibAFL/libafl_cc/src/cfg-ld.py", condition = { env_not_set = ["CFG_LD"] } }
+# JSON_PATH = { value = "/home/anonymous/json", conditioin = { env_not_set = ["JSON_PATH"] } }
+# CFG_LD = { value = "/home/anonymous/LibAFL/libafl_cc/src/cfg-ld.py", condition = { env_not_set = ["CFG_LD"] } }
 
 [tasks.source]
 condition = { files_not_exist = ["${PROJECT_DIR}/openssl"]}
