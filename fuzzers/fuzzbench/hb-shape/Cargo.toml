@@ -2,7 +2,7 @@
 name = "libfuzzer_shape"
 version = "0.14.1"
 authors = [
-  "anonymous <22307140045@m.fudan.edu.cn>",
+  "anonymous <anonymous@m.anonymous.edu.cn>",
 ]
 edition = "2021"
 
