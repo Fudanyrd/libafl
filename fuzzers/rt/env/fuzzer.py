@@ -1,0 +1,166 @@
+# Copyright 2020 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+"""Integration code for a LibAFL-based fuzzer."""
+
+import os
+import subprocess
+
+from fuzzers import utils
+
+def find_executable(shortname: str) -> str:
+    """Find the given executable in PATH."""
+    if shortname[0] == '/':
+        # this is an absolute path;
+        assert os.path.exists(shortname)
+        return shortname
+
+    for path in os.environ.get('PATH', '').split(os.pathsep):
+        exe_path = os.path.join(path, shortname)
+        if os.path.isfile(exe_path) and os.access(exe_path, os.X_OK):
+            return exe_path
+    raise FileNotFoundError(f'Executable {shortname} not found in PATH')
+
+
+def set_executable_env(envname: str, shortname: str):
+    relpath = find_executable(shortname)
+    os.environ[envname] = relpath
+
+
+GLLVM_INTSALL_DIR = '/usr/lib/go'
+
+
+def prepare_fuzz_environment():
+    """Prepare to fuzz with a LibAFL-based fuzzer."""
+    os.environ['ASAN_OPTIONS'] = 'abort_on_error=1:detect_leaks=0:' \
+                                 'malloc_context_size=0:symbolize=0:' \
+                                 'allocator_may_return_null=1:' \
+                                 'detect_odr_violation=0:handle_segv=0:' \
+                                 'handle_sigbus=0:handle_abort=0:' \
+                                 'handle_sigfpe=0:handle_sigill=0'
+    os.environ['UBSAN_OPTIONS'] = 'abort_on_error=1:' \
+                                  'allocator_release_to_os_interval_ms=500:' \
+                                  'handle_abort=0:handle_segv=0:' \
+                                  'handle_sigbus=0:handle_sigfpe=0:' \
+                                  'handle_sigill=0:print_stacktrace=0:' \
+                                  'symbolize=0:symbolize_inline_frames=0'
+
+    # update $PATH
+    paths = os.environ['PATH']
+    os.environ['PATH'] = paths + ":" + GLLVM_INTSALL_DIR
+
+    init_kvs = [
+        # most of these are required by gllvm.
+        ('LLVM_AR', 'llvm-ar'),
+        ('LLVM_AR_NAME', 'llvm-ar'),
+        ('LLVM_LINK_NAME', 'llvm-link'),
+        ('OPT', 'opt'),
+        ('GET_BC', os.path.join(GLLVM_INTSALL_DIR, 'get-bc')),
+        ('LLVM_CC_NAME', 'clang'),
+        ('LLVM_CXX_NAME', 'clang++'),
+        ('LLVM_DIS', 'llvm-ar'),
+    ]
+    for kv in init_kvs:
+        set_executable_env(kv[0], kv[1])
+    
+    # misc
+    os.environ['CLANG'] = os.path.join(GLLVM_INTSALL_DIR, 'gclang')
+    os.environ['CLANGPP'] = os.path.join(GLLVM_INTSALL_DIR, 'gclang++')
+
+
+def build():
+    """Build benchmark."""
+    # With LibFuzzer we use -fsanitize=fuzzer-no-link for build CFLAGS and then
+    # /usr/lib/libFuzzer.a as the FUZZER_LIB for the main fuzzing binary. This
+    # allows us to link against a version of LibFuzzer that we specify.
+    cflags = ['-fsanitize=fuzzer-no-link']
+    utils.append_flags('CFLAGS', cflags)
+    utils.append_flags('CXXFLAGS', cflags)
+
+    os.environ['CC'] = '/usr/lib/libafl_cc'
+    os.environ['CXX'] = '/usr/lib/libafl_cxx'
+    libfuzz = '/usr/lib/libfuzzer_rt.a'
+
+    # merge all of our lib into a single .o, then pack that into a static lib
+    subprocess.check_call([
+        '/usr/bin/ld', '-Ur', '--whole-archive', libfuzz, '-o',
+        '/tmp/libFuzzerMerged.o'
+    ])
+    subprocess.check_call(['/usr/bin/rm', libfuzz])
+    subprocess.check_call(
+        ['/usr/bin/ar', 'cr', libfuzz, '/tmp/libFuzzerMerged.o'])
+
+    os.environ['AR'] = '/usr/lib/libafl_ar'
+    os.environ['FUZZER_LIB'] = libfuzz # the same as builder.Dockerfile
+
+    utils.build_benchmark()
+
+
+def fuzz(input_corpus, output_corpus, target_binary):
+    """Run fuzzer. Wrapper that uses the defaults when calling
+    run_fuzzer."""
+    run_fuzzer(input_corpus, output_corpus, target_binary)
+
+
+def run_fuzzer(input_corpus, output_corpus, target_binary, extra_flags=None):
+    """Run fuzzer."""
+    if extra_flags is None:
+        extra_flags = []
+
+    # ASAN doesn't play nicely with our signal handling
+    # in the future, we will make this more compatible with libfuzzer, but
+    # for the initial implementation, we consider this sufficient
+    prepare_fuzz_environment()
+
+    # Seperate out corpus and crash directories as sub-directories of
+    # |output_corpus| to avoid conflicts when corpus directory is reloaded.
+    crashes_dir = os.path.join(output_corpus, 'crashes')
+    output_corpus = os.path.join(output_corpus, 'corpus')
+    os.makedirs(crashes_dir)
+    os.makedirs(output_corpus)
+
+    flags = [
+        # not supported by libafl_libfuzzer currently
+        '-print_final_stats=1',
+        # `close_fd_mask` to prevent too much logging output from the target.
+        '-close_fd_mask=3',
+        # Run in fork mode to allow ignoring ooms, timeouts, crashes and
+        # continue fuzzing indefinitely.
+        '-fork=1',
+        '-ignore_ooms=1',
+        '-ignore_timeouts=1',
+        '-ignore_crashes=1',
+
+        # Don't use LSAN's leak detection. Other fuzzers won't be using it and
+        # using it will cause libFuzzer to find "crashes" no one cares about.
+        # libafl_libfuzzer does not do leak checking regardless; not supported
+        '-detect_leaks=0',
+
+        # Store crashes along with corpus for bug based benchmarking.
+        f'-artifact_prefix={crashes_dir}/',
+    ]
+    flags += extra_flags
+    if 'ADDITIONAL_ARGS' in os.environ:
+        flags += os.environ['ADDITIONAL_ARGS'].split(' ')
+    dictionary_path = utils.get_dictionary_path(target_binary)
+    if dictionary_path:
+        flags.append('-dict=' + dictionary_path)
+
+    # Generate global CFG
+    subprocess.check_call(['/usr/lib/build-cfg.sh', target_binary])
+    os.environ['AFL_CFG_PATH'] = os.path.realpath(target_binary) + '_cfg'
+
+    command = [target_binary] + flags + [output_corpus, input_corpus]
+    print('[run_fuzzer] Running command: ' + ' '.join(command))
+    subprocess.check_call(command)
