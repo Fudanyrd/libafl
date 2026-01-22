@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -e
+
 if [[ x"$1" == x"" ]]; then
   echo "Usage: $0 <binary-name-without-suffix>"
   exit 1
