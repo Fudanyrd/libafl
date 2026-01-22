@@ -19,6 +19,8 @@ CFG_OUTPUT_PATH=$PWD $CLANG -c -Xclang -load \
   -Xclang -fpass-plugin=$cfg_pass \
   "$1".ll
 
+ls . 1>&2
+
 # parse the ll for the order of each guard.
 cat "$1".ll | \
   grep "compiler" | \
