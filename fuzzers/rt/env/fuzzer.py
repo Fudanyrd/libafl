@@ -16,6 +16,7 @@
 
 import os
 import subprocess
+import time
 
 from fuzzers import utils
 
@@ -90,6 +91,7 @@ def build():
 
     os.environ['CC'] = '/usr/lib/libafl_cc'
     os.environ['CXX'] = '/usr/lib/libafl_cxx'
+    os.environ['AR'] = '/usr/lib/libafl_ar'
     libfuzz = '/usr/lib/libfuzzer_rt.a'
 
     # merge all of our lib into a single .o, then pack that into a static lib
@@ -114,7 +116,15 @@ def fuzz(input_corpus, output_corpus, target_binary):
 
 
 def run_fuzzer(input_corpus, output_corpus, target_binary, extra_flags=None):
-    """Run fuzzer."""
+    """Run fuzzer.
+
+    Arguments:
+      input_corpus: Directory containing the initial seed corpus for
+                    the benchmark.
+      output_corpus: Output directory to place the newly generated corpus
+                     from fuzzer run.
+      target_binary: Absolute path to the fuzz target binary.
+    """
     if extra_flags is None:
         extra_flags = []
 
@@ -130,37 +140,28 @@ def run_fuzzer(input_corpus, output_corpus, target_binary, extra_flags=None):
     os.makedirs(crashes_dir)
     os.makedirs(output_corpus)
 
-    flags = [
-        # not supported by libafl_libfuzzer currently
-        '-print_final_stats=1',
-        # `close_fd_mask` to prevent too much logging output from the target.
-        '-close_fd_mask=3',
-        # Run in fork mode to allow ignoring ooms, timeouts, crashes and
-        # continue fuzzing indefinitely.
-        '-fork=1',
-        '-ignore_ooms=1',
-        '-ignore_timeouts=1',
-        '-ignore_crashes=1',
-
-        # Don't use LSAN's leak detection. Other fuzzers won't be using it and
-        # using it will cause libFuzzer to find "crashes" no one cares about.
-        # libafl_libfuzzer does not do leak checking regardless; not supported
-        '-detect_leaks=0',
-
-        # Store crashes along with corpus for bug based benchmarking.
-        f'-artifact_prefix={crashes_dir}/',
-    ]
-    flags += extra_flags
-    if 'ADDITIONAL_ARGS' in os.environ:
-        flags += os.environ['ADDITIONAL_ARGS'].split(' ')
-    dictionary_path = utils.get_dictionary_path(target_binary)
-    if dictionary_path:
-        flags.append('-dict=' + dictionary_path)
-
     # Generate global CFG
+    report_dir = '/tmp/report-data'
+    start_time = time.time()
     subprocess.check_call(['/usr/lib/build-cfg.sh', target_binary])
+    end_time = time.time()
     os.environ['AFL_CFG_PATH'] = os.path.realpath(target_binary) + '_cfg'
+    with open(os.path.join(report_dir, 'cfg-time.txt'), 'w') as f:
+        f.write(f'{(end_time - start_time):.5}\n')
 
-    command = [target_binary] + flags + [output_corpus, input_corpus]
+    # TODO: the fuzzer appends its log to '$PWD/a.log';
+    # create a symbolic link from '$OUT/a.log' to '$PWD/a.log'.
+    if not os.path.exists(report_dir):
+        os.mkdir(report_dir)
+    subprocess.check_call(['ln', '-s', os.path.join(report_dir, 'a.log'),
+                                os.path.join(os.getcwd(), 'a.log')])
+
+    # A typical command line arguments for libafl:
+    # AFL_CFG_PATH=$PWD/fuzzer_ossfuzz_cfg \
+    # ./fuzzer_ossfuzz --cores 0 --input input --output ./output_corpus
+    command = [target_binary, 
+               '--output', output_corpus, 
+               '--input', input_corpus,
+               '--cores', '0']
     print('[run_fuzzer] Running command: ' + ' '.join(command))
     subprocess.check_call(command)

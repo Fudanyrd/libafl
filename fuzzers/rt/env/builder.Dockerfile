@@ -21,9 +21,10 @@ FROM $parent_image
 RUN apt-get update && \
     apt-get remove -y llvm-10 && \
     apt-get install -y \
-        build-essential \
-        llvm-11 \
-        clang-12 && \
+        build-essential lsb-release wget software-properties-common gnupg && \
+    wget https://apt.llvm.org/llvm.sh && \
+    chmod +x llvm.sh && \
+    ./llvm.sh 15 && rm -f llvm.sh && \
     apt-get install -y wget libstdc++5 libtool-bin automake flex bison \
         libglib2.0-dev libpixman-1-dev python3-setuptools unzip \
         apt-utils apt-transport-https ca-certificates joe curl \
@@ -32,12 +33,13 @@ RUN apt-get update && \
 # Uninstall old Rust & Install the latest one.
 RUN if which rustup; then rustup self uninstall -y; fi && \
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs > /rustup.sh && \
-    sh /rustup.sh --default-toolchain nightly-2024-08-12 -y && \
-    rm /rustup.sh
+    sh /rustup.sh --default-toolchain nightly -y && \
+    rm /rustup.sh && /root/.cargo/bin/rustup default nightly
 
 # Download our libafl and pre-built gllvm (extracted to /usr/lib/go/)
 # Set CLANG and CLANGPP to control the clang executable used by libafl'c clang wrapper.
 RUN git clone https://github.com/Fudanyrd/libafl --branch fast --depth 1 /libafl && \
+    git clone https://github.com/nlohmann/json.git --depth 1 /libafl/json && \
     cd / && \
     tar xkf /libafl/bin/gllvm.tar.xz && \
     chmod +x /usr/lib/go/* && \
@@ -47,6 +49,7 @@ RUN git clone https://github.com/Fudanyrd/libafl --branch fast --depth 1 /libafl
     cd ./fuzzers/rt && \
     env -i CXX=$CXX CC=$CC PATH="/root/.cargo/bin/:$PATH" \
     CLANG=/usr/lib/go/gclang CLANGPP=/usr/lib/go/gclang++ \
+    JSON_PATH=/libafl/json \
     cargo build --profile release --features setcover && \
     cp ./target/release/liblibfuzzer_rt.a /usr/lib/libfuzzer_rt.a && \
     cp ./target/release/libafl_ar /usr/lib/libafl_ar && \
