@@ -492,7 +492,9 @@ where
     Tail: MatchName,
 {
     fn match_name<T>(&self, name: &str) -> Option<&T> {
-        if type_eq::<Head, T>() && name == self.0.name() {
+        // println!("{} {} {}", type_eq::<Head, T>(), name, self.0.name());
+        // if type_eq::<Head, T>() && name == self.0.name() {
+        if name == self.0.name() {
             unsafe { (&raw const self.0 as *const T).as_ref() }
         } else {
             self.1.match_name::<T>(name)

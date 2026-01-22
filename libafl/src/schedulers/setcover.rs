@@ -2,6 +2,7 @@
 
 use core::ops::DerefMut;
 use std::borrow::ToOwned;
+use std::time::{Duration, Instant};
 
 use crate::{
     corpus::{Corpus, CorpusId},
@@ -13,6 +14,9 @@ use crate::{
 use libafl_bolts::ErrorBacktrace;
 
 use super::HasQueueCycles;
+
+static mut CULL_QUEUE_TIME: Duration = Duration::ZERO;
+static mut TICKS: u64 = 0;
 
 /// The setcover scheduler.
 #[derive(Debug, Clone)]
@@ -83,7 +87,15 @@ where
             ));
         } else {
             // select next seed.
+            let now = Instant::now();
             state.cull_queue();
+            unsafe {
+                CULL_QUEUE_TIME += now.elapsed();
+                TICKS += 1;
+                if TICKS % 1024 == 0 {
+                    eprintln!("{}", CULL_QUEUE_TIME.as_millis());
+                }
+            }
 
             // try to get the favored id.
             let mut id = state.corpus().get_favored_id();
