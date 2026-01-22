@@ -146,6 +146,8 @@ bool DumpCfgPass::runOnModule(Module &M) {
 #endif
   LLVMContext &Ctx = M.getContext();
   auto         moduleName = M.getName();
+  std::cerr << "\033[01;32m[+]\033[0;m dump-cfg-pass processing "
+    << std::string(moduleName) << std::endl;
 
   for (auto &F : M) {
     unsigned bb_cnt = 0;

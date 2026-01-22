@@ -26,20 +26,6 @@ pub fn main() {
             .silence(true)
             .parse_args(&args)
             .expect("Failed to parse the command line")
-            .link_staticlib(&dir, FUZZER_LIB_NAME)
-            .add_configuration(Configuration::Compound(vec![
-                Configuration::GenerateCoverageMap,
-            ]))
-            .add_configuration(Configuration::Compound(vec![
-                Configuration::CmpLog,
-            ]))
-            .add_configuration(Configuration::Compound(vec![
-                Configuration::GenerateCoverageMap,
-                Configuration::AddressSanitizer,
-            ]))
-            .add_configuration(Configuration::Compound(vec![
-                Configuration::UndefinedBehaviorSanitizer,
-            ]))
             .run()
             .expect("Failed to run the wrapped compiler")
         {
