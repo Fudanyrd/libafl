@@ -176,7 +176,7 @@ def run_fuzzer(input_corpus, output_corpus, target_binary, extra_flags=None):
     # in the future, we will make this more compatible with libfuzzer, but
     # for the initial implementation, we consider this sufficient
     prepare_fuzz_environment()
-    handle_no_seed_found(input_corpus)
+    _handle_no_seed_found(input_corpus)
 
     # Seperate out corpus and crash directories as sub-directories of
     # |output_corpus| to avoid conflicts when corpus directory is reloaded.
