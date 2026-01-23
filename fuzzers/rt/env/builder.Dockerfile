@@ -24,7 +24,7 @@ RUN apt-get update && \
         build-essential lsb-release wget software-properties-common gnupg && \
     wget https://apt.llvm.org/llvm.sh && \
     chmod +x llvm.sh && \
-    ./llvm.sh 15 && rm -f llvm.sh && \
+    ./llvm.sh 16 && rm -f llvm.sh && \
     apt-get install -y wget libstdc++5 libtool-bin automake flex bison \
         libglib2.0-dev libpixman-1-dev python3-setuptools unzip \
         apt-utils apt-transport-https ca-certificates joe curl \

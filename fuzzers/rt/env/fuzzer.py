@@ -15,8 +15,11 @@
 """Integration code for a LibAFL-based fuzzer."""
 
 import os
+import shutil
 import subprocess
+import sys
 import time
+import yaml
 
 from fuzzers import utils
 
@@ -40,6 +43,7 @@ def set_executable_env(envname: str, shortname: str):
 
 
 GLLVM_INTSALL_DIR = '/usr/lib/go'
+LLVM_VERSION_MAJOR = '16'
 
 
 def prepare_fuzz_environment():
@@ -61,20 +65,26 @@ def prepare_fuzz_environment():
     paths = os.environ['PATH']
     os.environ['PATH'] = paths + ":" + GLLVM_INTSALL_DIR
 
+
+def prepare_build_environment():
     init_kvs = [
         # most of these are required by gllvm.
-        ('LLVM_AR', 'llvm-ar'),
-        ('LLVM_AR_NAME', 'llvm-ar'),
-        ('LLVM_LINK_NAME', 'llvm-link'),
-        ('OPT', 'opt'),
+        ('LLVM_AR', 'llvm-ar-' + LLVM_VERSION_MAJOR),
+        ('LLVM_AR_NAME', 'llvm-ar-' + LLVM_VERSION_MAJOR),
+        ('LLVM_LINK_NAME', 'llvm-link-' + LLVM_VERSION_MAJOR),
+        ('OPT', 'opt-' + LLVM_VERSION_MAJOR),
         ('GET_BC', os.path.join(GLLVM_INTSALL_DIR, 'get-bc')),
-        ('LLVM_CC_NAME', 'clang'),
-        ('LLVM_CXX_NAME', 'clang++'),
-        ('LLVM_DIS', 'llvm-ar'),
+        ('LLVM_CC_NAME', 'clang-' + LLVM_VERSION_MAJOR),
+        ('LLVM_CXX_NAME', 'clang++-' + LLVM_VERSION_MAJOR),
+        ('LLVM_DIS', 'llvm-dis-' + LLVM_VERSION_MAJOR),
     ]
     for kv in init_kvs:
         set_executable_env(kv[0], kv[1])
     
+    # update $PATH
+    paths = os.environ['PATH']
+    os.environ['PATH'] = paths + ":" + GLLVM_INTSALL_DIR
+
     # misc
     os.environ['CLANG'] = os.path.join(GLLVM_INTSALL_DIR, 'gclang')
     os.environ['CLANGPP'] = os.path.join(GLLVM_INTSALL_DIR, 'gclang++')
@@ -85,10 +95,14 @@ def build():
     # With LibFuzzer we use -fsanitize=fuzzer-no-link for build CFLAGS and then
     # /usr/lib/libFuzzer.a as the FUZZER_LIB for the main fuzzing binary. This
     # allows us to link against a version of LibFuzzer that we specify.
-    cflags = ['-fsanitize=fuzzer-no-link']
+    cflags = ['-fsanitize=fuzzer-no-link', 
+              '-fsanitize-coverage=trace-pc-guard,pc-table,no-prune',
+              '-fsanitize=address',
+              '-Xclang', '-opaque-pointers']
     utils.append_flags('CFLAGS', cflags)
     utils.append_flags('CXXFLAGS', cflags)
 
+    prepare_build_environment()
     os.environ['CC'] = '/usr/lib/libafl_cc'
     os.environ['CXX'] = '/usr/lib/libafl_cxx'
     os.environ['AR'] = '/usr/lib/libafl_ar'
@@ -106,7 +120,22 @@ def build():
     os.environ['AR'] = '/usr/lib/libafl_ar'
     os.environ['FUZZER_LIB'] = libfuzz # the same as builder.Dockerfile
 
+    # You should copy any fuzzer binaries that you need at runtime to the
+    # $OUT directory. E.g. for AFL:
+    # shutil.copy('/afl/afl-fuzz', os.environ['OUT'])
+
     utils.build_benchmark()
+
+    # Generate global CFG
+    fuzz_target_exe: str = utils.get_config_value('fuzz_target')
+    start_time = time.time()
+    cwd = os.getcwd()
+    os.chdir(os.environ['OUT'])
+    subprocess.check_call(['/usr/lib/build-cfg.sh', fuzz_target_exe])
+    end_time = time.time()
+    with open('cfg-time.txt', 'w') as f:
+        f.write(f'{(end_time - start_time):.5}\n')
+    os.chdir(cwd)
 
 
 def fuzz(input_corpus, output_corpus, target_binary):
@@ -140,14 +169,8 @@ def run_fuzzer(input_corpus, output_corpus, target_binary, extra_flags=None):
     os.makedirs(crashes_dir)
     os.makedirs(output_corpus)
 
-    # Generate global CFG
     report_dir = '/tmp/report-data'
-    start_time = time.time()
-    subprocess.check_call(['/usr/lib/build-cfg.sh', target_binary])
-    end_time = time.time()
     os.environ['AFL_CFG_PATH'] = os.path.realpath(target_binary) + '_cfg'
-    with open(os.path.join(report_dir, 'cfg-time.txt'), 'w') as f:
-        f.write(f'{(end_time - start_time):.5}\n')
 
     # TODO: the fuzzer appends its log to '$PWD/a.log';
     # create a symbolic link from '$OUT/a.log' to '$PWD/a.log'.
