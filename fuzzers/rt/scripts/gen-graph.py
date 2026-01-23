@@ -106,6 +106,12 @@ f"""
   # ok, write output to cfg file.
   with open(prefix + "_cfg", 'w') as fobj:
     for edge in output_edges:
-      fobj.write(f"{edge[0]} {edge[1]}\n")
+      # add check for out-of-bound
+      src, dst = edge[0], edge[1]
+      if src < n_edges and dst < n_edges:
+        fobj.write(f"{edge[0]} {edge[1]}\n")
+      else:
+        # why does this happen (🤔)
+        pass
 
     fobj.write(f"{n_edges} {n_edges}\n")

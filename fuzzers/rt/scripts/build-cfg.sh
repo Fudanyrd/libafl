@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 if [[ x"$1" == x"" ]]; then
   echo "Usage: $0 <binary-name-without-suffix>"
@@ -17,9 +17,17 @@ cfg_pass='/usr/lib/dump-cfg-pass.so'
 CFG_OUTPUT_PATH=$PWD $CLANG -c -Xclang -load \
   -Xclang $cfg_pass \
   -Xclang -fpass-plugin=$cfg_pass \
+  -Xclang -opaque-pointers \
   "$1".ll
 
-ls . 1>&2
+if test -f .pc; then
+    mv -f .pc "$1".ll.pc
+fi
+if test -f .cfg; then
+    mv -f .cfg "$1".ll.cfg
+fi
+
+ls . -a 1>&2
 
 # parse the ll for the order of each guard.
 cat "$1".ll | \
