@@ -128,13 +128,9 @@ def build():
 
     # Generate global CFG
     fuzz_target_exe: str = utils.get_config_value('fuzz_target')
-    start_time = time.time()
     cwd = os.getcwd()
     os.chdir(os.environ['OUT'])
     subprocess.check_call(['/usr/lib/build-cfg.sh', fuzz_target_exe])
-    end_time = time.time()
-    with open('cfg-time.txt', 'w') as f:
-        f.write(f'{(end_time - start_time):.5}\n')
     os.chdir(cwd)
 
 

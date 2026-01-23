@@ -4,6 +4,7 @@ import csv
 import sys
 import json
 import os
+import time
 import subprocess
 
 if __name__ == "__main__":
@@ -14,6 +15,8 @@ if __name__ == "__main__":
   prefix = sys.argv[1]
   cfg_json = prefix + ".ll.cfg"
   cfg_csv = prefix + ".csv"
+
+  start_time = time.time()
 
   if not os.path.exists(cfg_csv):
     print(f"ERROR: {cfg_csv} not found.", file = sys.stderr)
@@ -115,3 +118,9 @@ f"""
         pass
 
     fobj.write(f"{n_edges} {n_edges}\n")
+
+  end_time = time.time()  
+  with open(os.path.join(os.environ['OUT'], 
+                         'cfg-time.txt'), 'w') as fobj:
+    fobj.write(f'{(end_time - start_time):.5}\n')
+
