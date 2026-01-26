@@ -129,7 +129,8 @@ def build():
     fuzz_target_exe: str = utils.get_config_value('fuzz_target')
     cwd = os.getcwd()
     os.chdir(os.environ['OUT'])
-    subprocess.check_call(['/usr/lib/build-cfg.sh', fuzz_target_exe])
+    subprocess.check_call(['/usr/lib/build-cfg.sh', fuzz_target_exe],
+                          stdout=open('compile.log', 'w'))
     os.chdir(cwd)
 
 
