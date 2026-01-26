@@ -105,6 +105,7 @@ def build():
     prepare_build_environment()
     os.environ['CC'] = '/usr/lib/libafl_cc'
     os.environ['CXX'] = '/usr/lib/libafl_cxx'
+    os.environ['CCC'] = '/usr/lib/libafl_cxx'
     os.environ['AR'] = '/usr/lib/libafl_ar'
     libfuzz = '/usr/lib/libfuzzer_rt.a'
 
