@@ -34,6 +34,7 @@ mv -f "$1" "$1.old"
 clang++-16 "$obj" -lm -lz -lrt \
   -fsanitize=address \
   -fsanitize-coverage=trace-pc-guard,pc-table,no-prune \
+  $FUZZER_LIB \
   -o $1
 rm -f "$obj"
 
