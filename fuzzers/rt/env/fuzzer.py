@@ -99,6 +99,7 @@ def build():
               '-fsanitize-coverage=trace-pc-guard,pc-table,no-prune']
     utils.append_flags('CFLAGS', cflags)
     utils.append_flags('CXXFLAGS', cflags)
+    utils.append_flags('CXXFLAGS', ['-stdlib=libstdc++'])
 
     prepare_build_environment()
     os.environ['CC'] = '/usr/lib/libafl_cc'
