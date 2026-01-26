@@ -95,8 +95,8 @@ def build():
     # With LibFuzzer we use -fsanitize=fuzzer-no-link for build CFLAGS and then
     # /usr/lib/libFuzzer.a as the FUZZER_LIB for the main fuzzing binary. This
     # allows us to link against a version of LibFuzzer that we specify.
-    cflags = ['-fsanitize-coverage=trace-pc-guard,pc-table,no-prune',
-              '-fsanitize=address']
+    cflags = ['-fsanitize=address',
+              '-fsanitize-coverage=trace-pc-guard,pc-table,no-prune']
     utils.append_flags('CFLAGS', cflags)
     utils.append_flags('CXXFLAGS', cflags)
 
