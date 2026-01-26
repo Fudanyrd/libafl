@@ -58,5 +58,4 @@ RUN git clone https://github.com/Fudanyrd/libafl --branch fast --depth 1 /libafl
     cp ./target/release/libafl_libtool /usr/lib/libafl_libtool &&\
     clang-16 $( llvm-config-16 --cxxflags ) -fpic -shared -O1 -g \
     /libafl/fuzzers/rt/scripts/pass.cc -o /usr/lib/dump-cfg-pass.so &&\
-    cp ./scripts/build-cfg.sh /usr/lib/build-cfg.sh && chmod +x /usr/lib/build-cfg.sh &&\
-    cp ./scripts/gen-graph.py /usr/lib/gen-graph.py && chmod +x /usr/lib/gen-graph.py
+    cp ./scripts/build-cfg.sh /usr/lib/build-cfg.sh && chmod +x /usr/lib/build-cfg.sh
