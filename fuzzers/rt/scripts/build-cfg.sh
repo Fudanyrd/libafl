@@ -12,6 +12,7 @@ $GET_BC $1
 bc="$1.bc"
 cfg="$1"_cfg
 cfg_pass='/usr/lib/dump-cfg-pass.so'
+rm -f $cfg || true
 
 tmpf=$( mktemp tmp.XXXXXXXX.o )
 CFG_OUTPUT_PATH="$cfg" $CLANG \
