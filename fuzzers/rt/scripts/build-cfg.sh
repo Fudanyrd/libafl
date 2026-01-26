@@ -13,6 +13,7 @@ bc="$1.bc"
 cfg="$1"_cfg
 cfg_pass='/usr/lib/dump-cfg-pass.so'
 rm -f $cfg || true
+$LLVM_DIS $bc -o "$1.ll"
 
 tmpf=$( mktemp tmp.XXXXXXXX.o )
 CFG_OUTPUT_PATH="$cfg" $CLANG \
