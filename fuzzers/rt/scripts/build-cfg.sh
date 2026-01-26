@@ -35,7 +35,7 @@ clang++-16 "$obj" -lm -lz -lrt \
   -fsanitize=address \
   -fsanitize-coverage=trace-pc-guard,pc-table,no-prune \
   $FUZZER_LIB \
-  -o $1
+  -o $1 || true
 rm -f "$obj"
 
 rm -f "$tmpf" || true
