@@ -24,6 +24,19 @@ CFG_OUTPUT_PATH="$cfg" $CLANG \
     -c "$bc" \
     -o "$tmpf"
 
+# redo the linkage.
+## Why? Compare the size of __sancov_guards section,
+## in $1.old and "$1", and there will be a surprise.
+obj="$1.o"
+clang-16 "$bc" -c -o "$obj"
+mv -f "$1" "$1.old"
+# safe even if target is not instrumented with ASAN.
+clang++-16 "$obj" -lm -lz -lrt \
+  -fsanitize=address \
+  -fsanitize-coverage=trace-pc-guard,pc-table,no-prune \
+  -o $1
+rm -f "$obj"
+
 rm -f "$tmpf" || true
 rm -f "$bc" || true
 stat "$cfg" >/dev/null
