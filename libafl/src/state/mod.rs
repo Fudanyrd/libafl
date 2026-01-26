@@ -69,12 +69,6 @@ pub const MAX_NODE_PER_SEED: usize = 1000;
 /// default execution time: 0.5s
 pub const DEFAULT_EXEC_TIME_US: f64 = 500_000.0;
 
-/// file object
-static mut FOBJ: Option<fs::File> = None;// fs::File::create("state.csv").expect("failed to create state.csv");
-
-/// Size of Sample
-static mut SAMPLE_SIZE: usize = 1;
-
 /// Frequency of sampling
 const SAMPLE_FREQ: usize = 1_00;
 
@@ -1268,21 +1262,6 @@ where
         SC: Serialize + DeserializeOwned,
     {
 
-        unsafe {
-            if !FOBJ.as_mut().is_some() {
-                let mut fobj: fs::File = fs::File::create("state.csv").expect("failed to create state.csv");
-                FOBJ = Some(fobj);
-            }
-
-            writeln!(
-                FOBJ.as_mut().unwrap(),
-                "fast_corpus_size, all_corpus_size, setcover_size",
-            )
-            .expect("failed to write first line");
-
-            FOBJ.as_mut().unwrap().sync_all().expect("failed to sync state logging");
-        }
- 
         let mut state = Self {
             rand,
             executions: 0,
@@ -1810,26 +1789,6 @@ where
                     break;
                 }
             }
-
-            // log into csv file.
-            unsafe {
-                // should satisfy sample frequency
-                if SAMPLE_SIZE % SAMPLE_FREQ == 0 {
-                    writeln!(
-                        FOBJ.as_mut().unwrap(),
-                        "{}, {}, {}",
-                        fast_seed_count, 
-                        corpus_count_f as usize,
-                        setcover_size
-                    )
-                    .expect("failed to log to csv.");
-    
-                    FOBJ.as_mut().unwrap().sync_all().expect("failed to sync csv.");
-                }
-
-                SAMPLE_SIZE += 1;
-            }
-
         }
     }
 
