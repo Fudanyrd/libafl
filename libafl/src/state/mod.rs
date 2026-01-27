@@ -1794,7 +1794,7 @@ where
 
     /// Update bitmap score.
     fn update_bitmap_score(&mut self, trace_bits: Vec<u8>, id: CorpusId) {
-        let trace_len: usize = std::cmp::min(trace_bits.len(), self.get_map_size());
+        let trace_len: usize = std::cmp::min(trace_bits.len(), self.successor_map.len());
         // println!("Trace bits {}", trace_bits.len());
 
         for i in 0..trace_len {
