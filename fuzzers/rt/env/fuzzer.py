@@ -90,6 +90,28 @@ def prepare_build_environment():
     os.environ['CLANGPP'] = os.path.join(GLLVM_INTSALL_DIR, 'gclang++')
 
 
+def _handle_xml2() -> None:
+    """Xml2 requires -lzma, fix this."""
+    cxx: str = 'clang++' + LLVM_VERSION_MAJOR
+    
+    # Just hard-code everything.
+    subprocess.check_call(
+        [cxx, 'xml.o', '-o', 'xml',
+         '-fsanitize=address', 
+         '-fsanitize-coverage=trace-pc-guard,pc-table,no-prune',
+         '/usr/lib/libfuzzer_rt.a',
+         '-lm',
+         '-lz',
+         '-lrt',
+         '-ldl',
+         '-lzma'])
+
+
+_BENCHARK_HANDLERS = {
+    "libxml2_xml_e85b9b": _handle_xml2,
+    "libxml2_xml": _handle_xml2,
+}
+
 def build():
     """Build benchmark."""
     # With LibFuzzer we use -fsanitize=fuzzer-no-link for build CFLAGS and then
@@ -132,6 +154,10 @@ def build():
     os.chdir(os.environ['OUT'])
     subprocess.check_call(['/usr/lib/build-cfg.sh', fuzz_target_exe],
                           stderr=open('compile.log', 'w'))
+    this_benchmark = os.environ['BENCHMARK']
+    if this_benchmark in _BENCHARK_HANDLERS.keys():
+        handler = _BENCHARK_HANDLERS[this_benchmark]
+        handler()
     os.chdir(cwd)
 
 
