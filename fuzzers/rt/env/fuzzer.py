@@ -92,7 +92,7 @@ def prepare_build_environment():
 
 def _handle_xml2() -> None:
     """Xml2 requires -lzma, fix this."""
-    cxx: str = 'clang++' + LLVM_VERSION_MAJOR
+    cxx: str = 'clang++-' + LLVM_VERSION_MAJOR
     
     # Just hard-code everything.
     subprocess.check_call(
