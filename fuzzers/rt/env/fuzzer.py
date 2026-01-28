@@ -95,10 +95,12 @@ def _handle_xml2() -> None:
     cxx: str = 'clang++-' + LLVM_VERSION_MAJOR
     
     # Just hard-code everything.
+    os.rename("xml.old", "xml")
     subprocess.check_call([
         os.path.join(GLLVM_INTSALL_DIR, "get-bc"),
         "xml"])
     subprocess.check_call([cxx, 'xml.bc', '-c', '-o', 'xml.o'])
+    os.unlink("xml")
     subprocess.check_call(
         [cxx, 'xml.o', '-o', 'xml',
          '-fsanitize=address', 
