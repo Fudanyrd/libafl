@@ -110,7 +110,7 @@ def _handle_xml2() -> None:
          '-lz',
          '-lrt',
          '-ldl',
-         '-lzma'])
+         '-llzma'])
     os.unlink("xml.o")
     os.unlink("xml.bc")
 
