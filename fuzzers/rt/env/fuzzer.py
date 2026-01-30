@@ -115,9 +115,37 @@ def _handle_xml2() -> None:
     os.unlink("xml.bc")
 
 
+def _handle_jpeg() -> None:
+    cxx: str = 'clang++-' + LLVM_VERSION_MAJOR
+    
+    # Just hard-code everything.
+    fuzz_target = "libjpeg_turbo_fuzzer"
+    os.rename(fuzz_target + ".old", fuzz_target)
+    subprocess.check_call([
+        os.path.join(GLLVM_INTSALL_DIR, "get-bc"),
+        fuzz_target])
+    bc = fuzz_target + ".bc"
+    obj = fuzz_target + ".o"
+    subprocess.check_call([cxx, bc, '-c', '-o', obj])
+    os.unlink(fuzz_target)
+    subprocess.check_call(
+        [cxx, '-o', fuzz_target,
+         '-fsanitize=address', 
+         '-fsanitize-coverage=trace-pc-guard,pc-table,no-prune',
+         obj,
+         '/usr/lib/libFuzzingEngine.a',
+         '-lm',
+         '-lz',
+         '-ldl',
+         '-lpthread',
+         '/src/libjpeg-turbo.main/libjpeg.a'])
+    os.unlink(obj)
+    os.unlink(bc)
+
 _BENCHARK_HANDLERS = {
     "libxml2_xml_e85b9b": _handle_xml2,
     "libxml2_xml": _handle_xml2,
+    "libjpeg-turbo_libjpeg_turbo_fuzzer": _handle_jpeg,
 }
 
 def build():
