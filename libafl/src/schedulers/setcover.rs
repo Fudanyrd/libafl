@@ -24,6 +24,9 @@ pub struct SetcoverScheduler<O> {
     observer: *const O,
 }
 
+/// Get overhead of update bitmap score, in milliseconds.
+pub static mut UPDATE_BITMAP_TIME: u64 = 0x0;
+
 impl<I, S, O> RemovableScheduler<I, S> for SetcoverScheduler<O> {}
 
 impl<O> SetcoverScheduler<O>
@@ -84,7 +87,12 @@ where
             ));
         } else {
             // select next seed.
+            let now = Instant::now();
             state.cull_queue();
+            unsafe {
+                let elapsed = now.elapsed();
+                UPDATE_BITMAP_TIME += (elapsed.as_millis() as u64);
+            }
 
             // try to get the favored id.
             let mut id = state.corpus().get_favored_id();

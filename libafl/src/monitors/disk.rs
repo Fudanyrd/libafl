@@ -268,7 +268,7 @@ where
             let mut fileref = unsafe { fileptr.as_ref().unwrap() };
             writeln!(
                 fileref,
-                "run_time,corpus_id,corpus_size,fast_corpus_size,objective_size,executions,execs_per_sec,coverage"
+                "run_time,overhead,corpus_id,corpus_size,fast_corpus_size,objective_size,executions,execs_per_sec,coverage"
             )
             .expect("Failed to write to the CSV file");
 
@@ -338,11 +338,12 @@ where
                 )
                 .expect("Failed to write to the csv file");
 
-                // corpus id, corpus size, objective size, executions, execs_per_sec, coverage
+                // corpus id, overhead, corpus size, objective size, executions, execs_per_sec, coverage
                 write!(
                     fileref,
-                    "{}, {}, {}, {}, {}, {}, ",
+                    "{}, {}, {}, {}, {}, {}, {}, ",
                     i,
+                    unsafe { crate::schedulers::setcover::UPDATE_BITMAP_TIME },
                     client.corpus_size,
                     client.fast_corpus_size,
                     client.objective_size,
