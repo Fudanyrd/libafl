@@ -27,6 +27,8 @@ pub struct SetcoverScheduler<O> {
 /// Get overhead of update bitmap score, in milliseconds.
 pub static mut UPDATE_BITMAP_TIME: u64 = 0x0;
 
+pub static mut ticks: u64 = 0x1;
+
 impl<I, S, O> RemovableScheduler<I, S> for SetcoverScheduler<O> {}
 
 impl<O> SetcoverScheduler<O>
@@ -92,7 +94,10 @@ where
             unsafe {
                 let elapsed = now.elapsed();
                 UPDATE_BITMAP_TIME += (elapsed.as_millis() as u64);
-                eprintln!("UPDATE_BITMAP_TIME {}", UPDATE_BITMAP_TIME);
+                if ticks % 4096 == 0 {
+                    eprintln!("UPDATE_BITMAP_TIME {}", UPDATE_BITMAP_TIME);
+                }
+                ticks += 1;
             }
 
             // try to get the favored id.
