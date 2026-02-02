@@ -92,6 +92,7 @@ where
             unsafe {
                 let elapsed = now.elapsed();
                 UPDATE_BITMAP_TIME += (elapsed.as_millis() as u64);
+                eprintln!("UPDATE_BITMAP_TIME {}", UPDATE_BITMAP_TIME);
             }
 
             // try to get the favored id.
