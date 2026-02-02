@@ -2,6 +2,7 @@
 
 use core::ops::DerefMut;
 use std::borrow::ToOwned;
+use std::time::{Duration, Instant};
 
 use crate::{
     corpus::{Corpus, CorpusId},
@@ -22,6 +23,11 @@ pub struct SetcoverScheduler<O> {
     // The observer.
     observer: *const O,
 }
+
+/// Get overhead of update bitmap score, in milliseconds.
+pub static mut UPDATE_BITMAP_TIME: u64 = 0x0;
+
+pub static mut ticks: u64 = 0x1;
 
 impl<I, S, O> RemovableScheduler<I, S> for SetcoverScheduler<O> {}
 
@@ -83,7 +89,16 @@ where
             ));
         } else {
             // select next seed.
+            let now = Instant::now();
             state.cull_queue();
+            unsafe {
+                let elapsed = now.elapsed();
+                UPDATE_BITMAP_TIME += (elapsed.as_millis() as u64);
+                if ticks % 4096 == 0 {
+                    eprintln!("UPDATE_BITMAP_TIME {}", UPDATE_BITMAP_TIME);
+                }
+                ticks += 1;
+            }
 
             // try to get the favored id.
             let mut id = state.corpus().get_favored_id();

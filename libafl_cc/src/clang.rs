@@ -312,6 +312,11 @@ impl ToolWrapper for ClangWrapper {
         self
     }
 
+    fn change_configuration(&mut self, configuration: crate::Configuration) -> &'_ mut Self {
+        self.configurations[0] = configuration;
+        self
+    }
+
     fn configurations(&self) -> Result<Vec<crate::Configuration>, Error> {
         let mut configs = self.configurations.clone();
         configs.reverse();

@@ -8,7 +8,7 @@ use core::{
 };
 
 use ahash::RandomState;
-use libafl_bolts::{ownedref::OwnedMutSlice, AsSlice, AsSliceMut, HasLen, Named, Truncate};
+use libafl_bolts::{AsSlice, AsSliceMut, HasLen, Named, Truncate, ownedref::OwnedMutSlice, tuples::MatchName};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use crate::{

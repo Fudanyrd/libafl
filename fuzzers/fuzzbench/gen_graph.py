@@ -1,77 +1,111 @@
 #!/usr/bin/python3
-import os
+
+import csv
 import sys
-from elftools.elf.elffile import ELFFile
+import json
+import os
+import subprocess
 
+if __name__ == "__main__":
+  if len(sys.argv) != 2:
+    print("ERROR: file prefix not given", file=sys.stderr)
+    sys.exit(1)
+  
+  prefix = sys.argv[1]
+  cfg_json = prefix + ".ll.cfg"
+  cfg_csv = prefix + ".csv"
 
-def get_begin_sancov_addr(elf_file_path):
-    with open(elf_file_path, 'rb') as f:
-        elffile = ELFFile(f)
-        for section in elffile.iter_sections():
-            if section.name == "__sancov_guards":
-                return section['sh_addr']
-    return None
+  if not os.path.exists(cfg_csv):
+    print(f"ERROR: {cfg_csv} not found.", file = sys.stderr)
+    sys.exit(1)
+  if not os.path.exists(cfg_json):
+    print(f"ERROR: {cfg_json} not found.", file = sys.stderr)
+    sys.exit(1)
 
-def get_sancov_cfg(elf_file_path, sancov_begin_addr, gap):
-    cfg_dict_list = dict()
-    
-    # read from .cfg_log_section
-    with open(elf_file_path, 'rb') as f:
-        elffile = ELFFile(f)
-        for section in elffile.iter_sections():
-            if section.name == ".cfg_log_section":
-                for i in range(0, section.data_size, 2 * gap):
-                    sancov_addr = int.from_bytes(section.data()[i:i+8], byteorder='little')
-                    pred_index = (sancov_addr-sancov_begin_addr)//4
-                    succ_sancov_addr = int.from_bytes(section.data()[i+gap:i+gap+8], byteorder='little')
-                    succ_index = (succ_sancov_addr-sancov_begin_addr)//4
-                    if pred_index not in cfg_dict_list:
-                        cfg_dict_list[pred_index] = []
-                    cfg_dict_list[pred_index].append(succ_index)
-    return cfg_dict_list
-            
-                    
-# if __name__ == '__main__': 
-#     elf_path = sys.argv[1]
-#     sancov_addr = get_begin_sancov_addr(elf_path)
-#     if not sancov_addr:
-#         print("No sancov section found")
-#         sys.exit(1)
-#     # we use struct, no need to get gap 
-#     gap = 8
-#     # from .cfg_log_section get sancov_addr(8 bytes) and corresponding succ's sancov_addr (8 bytes)
-#     cfg = get_sancov_cfg(elf_path, sancov_addr, gap)
-#     #print(cfg)
-#     with open("sancov_cfg", "w") as f:
-#         for pred_index in cfg:
-#             for succ_index in cfg[pred_index]:
-#                 f.write(str(pred_index + 6) + " " + str(succ_index + 6) + "\n")
-                
+  # read the json graph
+  with open(cfg_json, 'r') as fobj:
+    cfg_obj:dict = json.load(fobj)
 
+  # read the csv file
+  with open(cfg_csv, 'r') as fobj:
+    for line in fobj:
+      leading: str = line
+      break
 
-if __name__ == '__main__': 
-    elf_path = sys.argv[1]
-    sancov_addr = get_begin_sancov_addr(elf_path)
-    if sancov_addr is None:
-        print("No sancov section found")
-        sys.exit(1)
-    
-    gap = 8
-    cfg = get_sancov_cfg(elf_path, sancov_addr, gap)
+  guards= [word.strip() for word in leading.split(',')]
 
-    min_val = 65536
-    for pred_index in cfg:
-        min_val = min(min_val, pred_index)
-        for succ_index in cfg[pred_index]:
-            min_val = min(min_val, succ_index)
-    
-    # Extract the base file name without extension
-    file_name = os.path.splitext(os.path.basename(elf_path))[0]
-    sancov_cfg_filename = f"{file_name}_sancov_cfg"
-    
-    with open(sancov_cfg_filename, "w") as f:
-        for pred_index in cfg:
-            for succ_index in cfg[pred_index]:
-                f.write(str(pred_index - min_val) + " " + str(succ_index - min_val) + "\n")
+  size_of_guards: dict = {}
+  for guard in guards:
+    size_of_guards[guard] = 0
 
-    
+  call_args = []
+  with open(cfg_csv, 'r') as fobj:
+    line_no = 0
+    for line in fobj:
+      if line_no != 0:
+        words = [word.strip() for word in line.split(',')]
+        call_args.append({
+          "base": words[0], # base address
+          "offset": int(words[1]) // 4,  # offset
+        })
+      line_no += 1
+
+  calls, edges = cfg_obj['calls'], cfg_obj['edges']
+
+  # compute the offset of guards based on call_args and calls.
+  off = 0
+
+  # try mapping guard to function
+  guard_to_fn = {}
+  for fn in calls.keys():
+    args = call_args[off]
+    call = calls[fn]
+    guard_to_fn[args["base"]] = fn
+    num_call = len(call.keys())
+    size_of_guards[args['base']] = num_call
+    off += num_call
+    if off >= len(call_args):
+      break
+
+  #print(size_of_guards)
+  #print(guard_to_fn)
+
+  # compute the offset of each guard.
+  guard_off = {}
+  off = 0
+  for guard in guards:
+    guard_off[guard] = off
+    off += size_of_guards[guard]
+
+  output_edges = []
+  for guard in guards:
+    try:
+      fn = guard_to_fn[guard]
+    except:
+      continue
+    off = guard_off[guard]
+    basic_blocks = edges[fn]
+    num_basic_blocks = len(basic_blocks)
+
+    for i in range(num_basic_blocks):
+      for succ in basic_blocks[i]:
+        output_edges.append([i + off, succ + off])
+  
+  result = subprocess.run(
+f"""
+  readelf -S {prefix} 2> /dev/null | grep \"sancov_pc\" -A 1 | tail -n 1 | sed -E \"s/0*([a-fA-F0-9]+).*/\\1/\"
+""",
+    shell=True,
+    capture_output=True,
+  )
+
+  assert result.returncode == 0, "Something went wrong. Abort"
+  n_edges = int(result.stdout.decode(), base=16)
+  n_edges = n_edges // 16
+
+  # ok, write output to cfg file.
+  with open(prefix + "_cfg", 'w') as fobj:
+    for edge in output_edges:
+      fobj.write(f"{edge[0]} {edge[1]}\n")
+
+    fobj.write(f"{n_edges} {n_edges}\n")

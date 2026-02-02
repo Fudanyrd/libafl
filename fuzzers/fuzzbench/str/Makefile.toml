@@ -13,7 +13,7 @@ LIBAFL_CXX = '${CARGO_TARGET_DIR}/${PROFILE}/libafl_cxx'
 LIBAFL_LIBTOOL = '${CARGO_TARGET_DIR}/${PROFILE}/libafl_libtool'
 FUZZER = '${CARGO_TARGET_DIR}/${PROFILE_DIR}/${FUZZER_NAME}'
 PROJECT_DIR = { script = ["pwd"] }
-JSON_PATH = { value = "" }
+JSON_PATH = { script = ["${PROJECT_DIR}/smart_pwd ${PROJECT_DIR}/../../../json/"], condition = { env_not_set = ["JSON_PATH"] } }
 CFG_LD = { value = "" }
 PROJECT_ROOT_DIR = { script = ["${PROJECT_DIR}/smart_pwd ${PROJECT_DIR}/../../.."] }
 CFG_GEN_PASS = { value = "${PROJECT_ROOT_DIR}/SeedScheduling/SanitizerCoveragePCGUARD.so", condition = { env_not_set = ["CFG_GEN_PASS"] } }
@@ -30,7 +30,6 @@ ls ${CFG_GEN_PASS}
 # should be set in the environment if libafl_cc
 # is built with the `cfg-ld` feature enabled
 
-# JSON_PATH = { value = "/home/liuyu/json", conditioin = { env_not_set = ["JSON_PATH"] } }
 # CFG_LD = { value = "/home/liuyu/LibAFL/libafl_cc/src/cfg-ld.py", condition = { env_not_set = ["CFG_LD"] } }
 
 # This project does not have to obtain source code from the internet.
@@ -81,17 +80,17 @@ args = [
 dependencies = ["lib", "cxx", "cc", "harness_obj"]
 
 [tasks.cfg]
-command = "../gen_graph.py"
-args = [
-  "${PROJECT_DIR}/${FUZZER_NAME}.asan",
-]
+script_runner = "@shell"
+script = '''
+  cd ${PROJECT_DIR} && ./build_cfg.sh ${FUZZER_NAME}.coverage
+'''
 dependencies = ["fuzzer"]
 
 [tasks.run]
 description = "Runs the fuzzer."
 script_runner = '@shell'
 script = '''
-AFL_CFG_PATH=${PROJECT_DIR}/fuzzer_libstr_sancov_cfg ./fuzzer_libstr.asan --input ${PROJECT_DIR}/input --cores 0
+AFL_CFG_PATH=${PROJECT_DIR}/${PROJECT_DIR}_sancov_cfg ./fuzzer_libstr.asan --input ${PROJECT_DIR}/input --cores 0
 '''
 dependencies = ["fuzzer", "cfg"]
 
@@ -111,7 +110,7 @@ args = ["-C", "libstr", "clean"]
 category = "Cleanup"
 script_runner = "@shell"
 script = '''
-rm -f ${PROJECT_DIR}/*.o ${PROJECT_DIR}/*.cfg ${PROJECT_DIR}/*.csv ${PROJECT_DIR}/fuzzer_libstr*
+rm -f ${PROJECT_DIR}/*.o ${PROJECT_DIR}/*.cfg ${PROJECT_DIR}/*.csv ${PROJECT_DIR}/fuzzer_libstr* ${PROJECT_DIR}/.*.bc ${PROJECT_DIR}/.*.dot
 '''
 
 [tasks.full_clean]

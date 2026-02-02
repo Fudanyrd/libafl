@@ -624,7 +624,11 @@ where
 
         let mut interesting = false;
         // TODO Replace with match_name_type when stable
-        let observer = observers.get(&self.map_ref).unwrap().as_ref();
+        let opt = observers.get(&self.map_ref);
+        if opt.is_none() {
+            return false;
+        }
+        let observer = opt.unwrap().as_ref();
 
         let map_state = state
             .named_metadata_map_mut()

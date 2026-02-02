@@ -15,7 +15,10 @@ use libafl_bolts::{serdeany::SerdeAnyMap, ErrorBacktrace, HasLen};
 use serde::{Deserialize, Serialize};
 
 use super::Corpus;
-use crate::{bitmap::Bitmap, corpus::CorpusId, state::HasCorpus, Error, HasMetadata};
+#[allow(unused_imports)]
+use crate::{
+    bitmap::{Bitmap, BitmapTrait, SparseBitmap}, 
+    corpus::CorpusId, state::HasCorpus, Error, HasMetadata};
 
 /// Shorthand to receive a [`Ref`] or [`RefMut`] to a stored [`Testcase`], by [`CorpusId`].
 /// For a normal state, this should return a [`Testcase`] in the corpus, not the objectives.
@@ -71,8 +74,7 @@ pub struct Testcase<I> {
     #[cfg(feature = "track_hit_feedbacks")]
     hit_objectives: Vec<Cow<'static, str>>,
     /// frontier node bitmap(optional)
-    frontier_node_bitmap: Option<Bitmap>,
-    covered_frontier_nodes: u32,
+    frontier_node_bitmap: Option<SparseBitmap>,
 }
 
 impl<I> HasMetadata for Testcase<I> {
@@ -249,7 +251,6 @@ impl<I> Testcase<I> {
             #[cfg(feature = "track_hit_feedbacks")]
             hit_objectives: Vec::new(),
             frontier_node_bitmap: None,
-            covered_frontier_nodes: 0,
         }
     }
 
@@ -276,7 +277,6 @@ impl<I> Testcase<I> {
             #[cfg(feature = "track_hit_feedbacks")]
             hit_objectives: Vec::new(),
             frontier_node_bitmap: None,
-            covered_frontier_nodes: 0,
         }
     }
 
@@ -303,7 +303,6 @@ impl<I> Testcase<I> {
             #[cfg(feature = "track_hit_feedbacks")]
             hit_objectives: Vec::new(),
             frontier_node_bitmap: None,
-            covered_frontier_nodes: 0,
         }
     }
 
@@ -340,12 +339,12 @@ impl<I> Testcase<I> {
         }
 
         self.use_setcover = true;
-        self.frontier_node_bitmap = Some(Bitmap::new(crate::state::MAP_SIZE));
+        self.frontier_node_bitmap = Some(SparseBitmap::new(unsafe { crate::state::MAP_SIZE }));
         return Ok(());
     }
 
     /// Get the bitmap of frontier nodes
-    pub fn frontier_node_bitmap(&self) -> Result<&Bitmap, Error> {
+    pub fn frontier_node_bitmap(&self) -> Result<&SparseBitmap, Error> {
         if self.frontier_node_bitmap == None {
             return Err(Error::Unsupported(
                 "Setcover schedule is not supported for OnDiskCorpus".into(),
@@ -357,7 +356,7 @@ impl<I> Testcase<I> {
     }
 
     /// Get the bitmap of frontier nodes (mutable)
-    pub fn frontier_node_bitmap_mut(&mut self) -> Result<&mut Bitmap, Error> {
+    pub fn frontier_node_bitmap_mut(&mut self) -> Result<&mut SparseBitmap, Error> {
         if self.frontier_node_bitmap == None {
             return Err(Error::Unsupported(
                 "Setcover schedule is not supported for OnDiskCorpus".into(),
@@ -371,7 +370,7 @@ impl<I> Testcase<I> {
     /// Get the number of frontier nodes that are covered
     pub fn covered_frontier_nodes_count(&self) -> Result<u32, Error> {
         if self.use_setcover {
-            return Ok(self.covered_frontier_nodes);
+            return Ok(self.frontier_node_bitmap.as_ref().unwrap().popcount() as u32);
         } else {
             return Err(Error::Unsupported(
                 "Setcover schedule is not supported for OnDiskCorpus".into(),
@@ -381,9 +380,8 @@ impl<I> Testcase<I> {
     }
 
     /// Set the number of frontier nodes that are covered
-    pub fn set_covered_frontier_nodes_count(&mut self, count: u32) -> Result<(), Error> {
+    pub fn set_covered_frontier_nodes_count(&mut self, _count: u32) -> Result<(), Error> {
         if self.use_setcover {
-            self.covered_frontier_nodes = count;
             return Ok(());
         } else {
             return Err(Error::Unsupported(
@@ -426,7 +424,6 @@ impl<I> Default for Testcase<I> {
             hit_objectives: Vec::new(),
             use_setcover: false,
             frontier_node_bitmap: None,
-            covered_frontier_nodes: 0,
         }
     }
 }

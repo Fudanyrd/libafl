@@ -15,9 +15,11 @@ use std::io::BufRead;
 use std::{
     fs,
     path::{Path, PathBuf},
+    io::Write,
 };
 
-use crate::bitmap::{getrand64, popcount8};
+#[allow(unused_imports)]
+use crate::bitmap::{getrand64, popcount8, BitmapTrait, SparseBitmap};
 
 #[cfg(feature = "std")]
 use libafl_bolts::core_affinity::{CoreId, Cores};
@@ -50,7 +52,13 @@ use crate::{
 pub const DEFAULT_MAX_SIZE: usize = 1_048_576;
 
 /// map size
-pub const MAP_SIZE: usize = 1 << 10;
+pub static mut MAP_SIZE: usize = 1 << 16;
+
+/// favored corpus
+static mut FAVORED_CORPUS: Vec<CorpusId> = vec![];
+
+/// frontier node bitmap changed
+static mut MAP_CHANGED: bool = false;
 
 /// successor size
 pub const MAX_SUCCESSOR_COUNT: usize = 1024;
@@ -60,6 +68,15 @@ pub const MAX_NODE_PER_SEED: usize = 1000;
 
 /// default execution time: 0.5s
 pub const DEFAULT_EXEC_TIME_US: f64 = 500_000.0;
+
+/// Frequency of sampling
+const SAMPLE_FREQ: usize = 1_00;
+
+/// a simple csv logger
+// static mut CSV_LOGGER: *mut fs::File = std::ptr::null_mut();
+
+/// fast seed count
+pub static mut FAST_SEED_COUNT: usize = 0x0;
 
 /// The [`State`] of the fuzzer.
 /// Contains all important information about the current run.
@@ -350,10 +367,6 @@ pub struct StdState<I, C, R, SC> {
     global_frontier_bitmap: Bitmap,
     initial_frontier_bitmap: Bitmap,
     local_covered: Bitmap,
-    recent_frontier_count: u32,
-    global_covered_frontier_nodes_count: u32,
-    covered_seed_list_counter: u32,
-    covered_fast_seed_list_counter: u32,
     use_setcover_scheduling: bool,
     removed_frontier_found: bool,
     new_frontier_found: bool,
@@ -366,6 +379,7 @@ pub struct StdState<I, C, R, SC> {
     virgin_bits: Vec<u8>,
     /// Top entries for bitmap bytes
     top_rated: Vec<Option<CorpusId>>,
+
     // FIXME: These are probably unused.
     // recent_frontier_nodes: Vec<u32>,
     // frontier_discovery_time: Vec<u32>,
@@ -1247,6 +1261,7 @@ where
         C: Serialize + DeserializeOwned,
         SC: Serialize + DeserializeOwned,
     {
+
         let mut state = Self {
             rand,
             executions: 0,
@@ -1273,13 +1288,9 @@ where
             phantom: PhantomData,
             #[cfg(feature = "std")]
             multicore_inputs_processed: None,
-            global_frontier_bitmap: Bitmap::new(MAP_SIZE),
-            initial_frontier_bitmap: Bitmap::new(MAP_SIZE),
-            local_covered: Bitmap::new(MAP_SIZE),
-            recent_frontier_count: 0,
-            global_covered_frontier_nodes_count: 0,
-            covered_fast_seed_list_counter: 0,
-            covered_seed_list_counter: 0,
+            global_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
+            initial_frontier_bitmap: Bitmap::new(unsafe { MAP_SIZE }),
+            local_covered: Bitmap::new(unsafe { MAP_SIZE }),
             new_frontier_found: false,
             removed_frontier_found: false,
             global_frontier_updated: false,
@@ -1288,7 +1299,7 @@ where
             successor_map: vec![],   // init in load_cfg()
             successor_count: vec![], // init in load_cfg()
             virgin_bits: vec![],     // init in load_cfg()
-            top_rated: vec![None; MAP_SIZE], // maybe resized in load_cfg()
+            top_rated: vec![None; unsafe { MAP_SIZE }], // maybe resized in load_cfg()
         };
         feedback.init_state(&mut state)?;
         objective.init_state(&mut state)?;
@@ -1325,7 +1336,7 @@ where
 {
     fn load_cfg(&mut self) {
         // auto detect the minimum size of map.
-        let mut map_size = MAP_SIZE;
+        let mut map_size = unsafe { MAP_SIZE };
         let mut edges: Vec<ControlFlowGraphEdge> = vec![];
         // self.successor_count = vec![0; MAP_SIZE];
         // for _i in 0..MAP_SIZE {
@@ -1370,7 +1381,9 @@ where
                         map_size = dst + 1;
                     }
 
-                    edges.push(ControlFlowGraphEdge { src, dst });
+                    if src != dst {
+                        edges.push(ControlFlowGraphEdge { src, dst });
+                    }
 
                     // let cnt: usize = self.successor_count[src] as usize;
                     // self.successor_map[src][cnt] = dst as u32;
@@ -1382,6 +1395,8 @@ where
         } else {
             panic!("AFL_CFG_PATH not set");
         }
+
+        println!("Map size: {}", map_size);
 
         self.successor_count = vec![0; map_size];
         for _i in 0..map_size {
@@ -1395,11 +1410,15 @@ where
         }
         self.virgin_bits = vec![0xff; map_size];
         
-        if map_size > MAP_SIZE {
+        if map_size > unsafe { MAP_SIZE } {
             self.top_rated = vec![None; map_size];
             self.global_frontier_bitmap = Bitmap::new(map_size);
             self.initial_frontier_bitmap = Bitmap::new(map_size);
             self.local_covered = Bitmap::new(map_size);
+
+            unsafe {
+                MAP_SIZE = map_size;
+            }
         }
     }
 
@@ -1415,6 +1434,7 @@ where
         // self.virgin_bits = vec![0xff; MAP_SIZE];
     }
 
+    #[inline(always)]
     fn is_frontier_node_outer(&self, edge_id: usize) -> bool {
         let num_successors: u32 = self.successor_count[edge_id];
         if num_successors <= 1 {
@@ -1464,7 +1484,6 @@ where
     fn update_global_frontier_nodes(&mut self, id: CorpusId) {
         let mut updated_coverage_count: u32 = 0;
         let mut init_count: u32 = 0;
-        let mut real_map_size: usize = 0;
 
         // get number of covered frontier nodes from input
         if true {
@@ -1472,57 +1491,52 @@ where
             let input: &Testcase<I> = input_ref.deref();
 
             init_count = input.covered_frontier_nodes_count().unwrap();
-
-            real_map_size = input.frontier_node_bitmap().unwrap().len();
-            assert!(real_map_size != 0);
         }
 
         let mut count: u32 = 0;
-        for i in 0..(real_map_size / 8) {
-            let mut current: u8 = 0;
-            if true {
-                let input_ref: RefMut<'_, Testcase<I>> =
-                    self.corpus().get(id).unwrap().borrow_mut();
-                current = input_ref
+        {
+            let num_frontier_nodes: usize;
+            {
+                let input_ref = self.corpus().get(id).unwrap().borrow();
+                num_frontier_nodes = input_ref 
                     .deref()
                     .frontier_node_bitmap()
                     .unwrap()
-                    .get_ubyte(i);
-            }
-            if current == 0 {
-                continue;
+                    .indices
+                    .len();
             }
 
-            for bit in 0..(8) {
-                let edge_id: usize = (i * 8) + bit;
-                assert!(edge_id >= (i * 8));
-                if (current & (1 << bit)) != 0 {
-                    assert!(edge_id < real_map_size);
-
-                    if !self.is_frontier_node_outer(edge_id) {
-                        count += 1;
-                        if self.global_frontier_bitmap.get(edge_id) {
-                            self.global_frontier_bitmap.clear(edge_id);
-
-                            self.global_covered_frontier_nodes_count -= 1;
-                        }
-
-                        current = current & !(1 << bit);
+            for i in 0..num_frontier_nodes {
+                let edge_id: usize;
+                // current is true.
+                {
+                    let input_ref = self.corpus().get(id).unwrap().borrow();
+                    edge_id = input_ref 
+                        .deref()
+                        .frontier_node_bitmap()
+                        .unwrap()
+                        .indices[i];
+                }
+    
+                if !self.is_frontier_node_outer(edge_id) {
+                    count += 1;
+                    if self.global_frontier_bitmap.get(edge_id) {
+                        self.global_frontier_bitmap.clear(edge_id);
+                    }
+    
+                    // clear the bit from bitmap since it is no longer frontier node.
+                    {
+                        let mut input_ref: RefMut<'_, Testcase<I>> =
+                            self.corpus().get(id).unwrap().borrow_mut();
+                        input_ref
+                            .deref_mut()
+                            .frontier_node_bitmap_mut()
+                            .unwrap()
+                            .clear(edge_id);
                     }
                 }
+                updated_coverage_count += 1;
             }
-
-            // frontier_node_bitmap[i] = current;
-            if true {
-                let mut input_ref: RefMut<'_, Testcase<I>> =
-                    self.corpus().get(id).unwrap().borrow_mut();
-                input_ref
-                    .deref_mut()
-                    .frontier_node_bitmap_mut()
-                    .unwrap()
-                    .set_ubyte(i, current);
-            }
-            updated_coverage_count += popcount8(current) as u32;
         }
 
         // q->covered_frontier_nodes_count = updated_coverage_count;
@@ -1533,7 +1547,7 @@ where
                 .deref_mut()
                 .set_covered_frontier_nodes_count(updated_coverage_count);
         }
-        if self.global_covered_frontier_nodes_count == 0 {
+        if self.global_frontier_bitmap.popcount() == 0 {
             println!(
                 "Seed id {}, initial count {}, count {}",
                 id, init_count, count
@@ -1545,21 +1559,45 @@ where
     /// Perform seed reduction.
     fn setcover_reduction(&mut self) {
         assert!(self.use_setcover_scheduling);
+
+        unsafe {
+            if !FAVORED_CORPUS.is_empty() {
+                if !MAP_CHANGED {
+                    let selected_id: CorpusId = FAVORED_CORPUS.pop().unwrap();
+                    let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(selected_id);
+                    // self.update_global_frontier_nodes(selected_id);
+                    return;
+                } else {
+                    // dicards previous selected seeds.
+                    FAVORED_CORPUS.clear();
+                    MAP_CHANGED = false;
+                }
+            }
+        }
+
+        let real_map_size = self.global_frontier_bitmap.len();
+        for i in 0..real_map_size {
+            if self.global_frontier_bitmap.get(i) {
+                if !self.is_frontier_node_outer(i) {
+                    self.global_frontier_bitmap.clear(i);
+                }
+            }
+        }
+
         self.local_covered.clear_all();
         if self.corpus().is_empty() {
             panic!("No seeds in corpus");
         }
+        let popcount_global_frontier_bitmap: usize = self.global_frontier_bitmap.popcount();
 
         let mut fast_seed_exist: bool = false;
+        let mut fast_seed_count: usize = 0;
         let mut set_covered_seed_list: Vec<CorpusId> = vec![];
-        let mut set_covered_fast_seed_list: Vec<CorpusId> = vec![];
 
         let mut unselected_seeds: Vec<CorpusId> = vec![];
         let mut all_seeds: Vec<CorpusId> = vec![];
 
         let mut unselected_seeds_count: u32 = 0;
-        self.covered_seed_list_counter = 0;
-        self.covered_fast_seed_list_counter = 0;
 
         let mut total_exec_us: f64 = 0.0;
         let mut total_exec_us_sq: f64 = 0.0;
@@ -1569,6 +1607,11 @@ where
 
         for it in self.corpus().ids() {
             all_seeds.push(it);
+        }
+
+        if true {
+            use rand::seq::SliceRandom;
+            all_seeds.shuffle(&mut rand::thread_rng());
         }
 
         // compute execution time statistics,
@@ -1600,12 +1643,6 @@ where
             }
         }
 
-        // shuffle unselected seeds.
-        if true {
-            use rand::seq::SliceRandom;
-            unselected_seeds.shuffle(&mut rand::thread_rng());
-        }
-
         // compute mean and standard deviation
         let corpus_count_f: f64 = self.corpus().count() as f64;
         let mean_exec_us: f64 = (total_exec_us - max_exec_us) / (corpus_count_f - 1.0);
@@ -1615,17 +1652,20 @@ where
 
         if unselected_seeds_count == 0 {
             // randomly select one from all seeds.
-            let random_idx: usize = getrand64() % all_seeds.len();
-            let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(all_seeds[random_idx]);
+            let _ret: Result<(), Error> = self.corpus_mut().set_favored_id(all_seeds.pop().unwrap());
+            unsafe {
+                FAVORED_CORPUS.extend_from_slice(all_seeds.as_slice());
+            }
         } else {
             assert_eq!(unselected_seeds_count, unselected_seeds.len() as u32);
+            let mut setcover_size: usize = 0;
 
             while unselected_seeds_count > 0 {
                 // randomly sample a seed.
                 // for unselected seeds are already shuffled,
                 // we can just use the last one.
                 let random_idx: usize = (unselected_seeds_count - 1) as usize;
-                let seed_index: CorpusId = all_seeds[random_idx];
+                let seed_index: CorpusId = unselected_seeds[random_idx];
                 let mut exec_time: f64 = DEFAULT_EXEC_TIME_US;
 
                 // compute execution time, use default value if not available.
@@ -1643,7 +1683,6 @@ where
                 // decrement size of unselected seeds,
                 // move the last element to the current position.
                 unselected_seeds_count -= 1;
-                unselected_seeds[random_idx] = unselected_seeds[unselected_seeds_count as usize];
 
                 let mut local_covered_intersection_num: u32 = 0;
                 // compute local_covered_intersection_num.
@@ -1655,39 +1694,40 @@ where
                     }
                     assert_ne!(len, 0);
 
-                    for j in 0..(len / 8) {
-                        let mut previous: u8 = 0;
-                        if true {
-                            previous = self.local_covered.get_ubyte(j);
-                        }
-
-                        let mut current: u8 = 0;
-
-                        if true {
-                            let seed_ref: Ref<'_, Testcase<I>> =
+                    let frontier_node_bitmap: Vec<usize>;
+                    {
+                        let seed_ref: Ref<'_, Testcase<I>> =
                                 self.corpus().get(seed_index).unwrap().borrow();
-                            let reduction_seed: &Testcase<I> = seed_ref.deref();
-                            current = reduction_seed.frontier_node_bitmap().unwrap().get_ubyte(j);
-                        }
+                        let reduction_seed: &Testcase<I> = seed_ref.deref();    
+                        frontier_node_bitmap = reduction_seed.frontier_node_bitmap().unwrap().indices.clone();
+                    }
 
-                        if true {
-                            let local_covered: &mut Bitmap = &mut self.local_covered;
-                            local_covered.set_ubyte(j, previous | current);
-                            local_covered_intersection_num +=
-                                popcount8(local_covered.get_ubyte(j) & (!previous)) as u32;
+                    for edge in frontier_node_bitmap {
+                        // mark this frontier node as covered. 
+                        let previous = self.local_covered.get(edge);
+
+                        // should also check whether `edge` is a frontier node.
+                        if !previous && self.global_frontier_bitmap.get(edge) {
+                            self.local_covered.set(edge);
+                            local_covered_intersection_num += 1;
                         }
                     }
+
                 }
 
                 if local_covered_intersection_num == 0 {
+                    // the seed does not bring new coverage.
+                    // skip
                     continue;
                 }
+
+                setcover_size += 1;
 
                 // record in the seed list and fast seed list.
                 set_covered_seed_list.push(seed_index);
                 if exec_time < mean_exec_us + 1.0 * stddev_exec_us {
                     fast_seed_exist = true;
-                    set_covered_fast_seed_list.push(seed_index);
+                    fast_seed_count += 1;
                 }
 
                 // check whether all frontier nodes are covered.
@@ -1695,37 +1735,57 @@ where
 
                 if true {
                     let local_covered: &mut Bitmap = &mut self.local_covered;
-                    for j in 0..local_covered.len() / 8 {
-                        let previous: u8 = local_covered.get_ubyte(j);
-                        let global: u8 = self.global_frontier_bitmap.get_ubyte(j);
-
-                        if (!previous) & global == 0 {
-                            all_covered = false;
-                            break;
-                        }
+                    // for j in 0..local_covered.len() / 8 {
+                    //     let local: u8 = local_covered.get_ubyte(j);
+                    //     let global: u8 = self.global_frontier_bitmap.get_ubyte(j);
+                    //     if (!local) & global == 0 {
+                    //         all_covered = false;
+                    //         break;
+                    //     }
+                    // }
+                    
+                    // Optimization from O(L) to O(1):
+                    // if the popcount of local_coverd is less than popcount of global_frontier_bitmap,
+                    // then all_covered cannot be true.
+                    if local_covered.popcount() < popcount_global_frontier_bitmap {
+                        all_covered = false;
                     }
                 }
+
+
+                // if unsafe {CSV_LOGGER} != std::ptr::null_mut() {
+                //     let mut fileref = unsafe { CSV_LOGGER.as_ref().unwrap() };
+                //     writeln!(
+                //         fileref,
+                //         "{}, {}",
+                //         fast_seed_count, 
+                //         corpus_count_f as usize,
+                //     )
+                //     .expect("failed to log to csv.");
+
+                //     fileref.sync_all().expect("failed to sync csv.");
+                // } else {
+                //     assert!(false);
+                // }
 
                 // update the number of fast seeds.
-                if true {
-                    let count_fast = set_covered_fast_seed_list.len();
-                    self.corpus_mut().set_fast(count_fast);
+                unsafe {
+                    FAST_SEED_COUNT += fast_seed_count;
+                    // assert!(FAST_SEED_COUNT == 0);
                 }
-                if all_covered {
-                    if fast_seed_exist {
-                        // randomly select one of the fast seed.
-                        let random_idx: usize = getrand64() % set_covered_fast_seed_list.len();
-                        let _ret: Result<(), Error> = self
-                            .corpus_mut()
-                            .set_favored_id(set_covered_fast_seed_list[random_idx]);
-                    } else {
-                        // randomly select one of the seed.
-                        let random_idx: usize = getrand64() % set_covered_seed_list.len();
-                        let _ret: Result<(), Error> = self
-                            .corpus_mut()
-                            .set_favored_id(set_covered_seed_list[random_idx]);
+                if fast_seed_exist {
+                    self.corpus_mut().set_fast(fast_seed_count);
+                } else {
+                    self.corpus_mut().set_fast(0);
+                }
+                if all_covered || unselected_seeds_count == 0 {
+                    unsafe {
+                        FAVORED_CORPUS.extend_from_slice(set_covered_seed_list.as_slice());
                     }
 
+                    unsafe {
+                        let _ret = self.corpus_mut().set_favored_id(FAVORED_CORPUS.pop().unwrap());
+                    }
                     break;
                 }
             }
@@ -1734,7 +1794,8 @@ where
 
     /// Update bitmap score.
     fn update_bitmap_score(&mut self, trace_bits: Vec<u8>, id: CorpusId) {
-        let trace_len: usize = trace_bits.len();
+        let trace_len: usize = std::cmp::min(trace_bits.len(), self.successor_map.len());
+        // println!("Trace bits {}", trace_bits.len());
 
         for i in 0..trace_len {
             let bit: u8 = trace_bits[i];
@@ -1749,7 +1810,7 @@ where
 
                         let input: &mut Testcase<I> = input_ref.deref_mut();
 
-                        let frontier_bitmap: &mut Bitmap =
+                        let frontier_bitmap: &mut SparseBitmap =
                             input.frontier_node_bitmap_mut().unwrap();
                         frontier_bitmap.set(edge_id);
 
@@ -1763,7 +1824,7 @@ where
                         let global_frontier_bitmap: &mut Bitmap = &mut self.global_frontier_bitmap;
                         if !global_frontier_bitmap.get(edge_id) {
                             global_frontier_bitmap.set(edge_id);
-                            self.global_covered_frontier_nodes_count += 1;
+                            unsafe { MAP_CHANGED = true };
                         }
                     }
                 }
@@ -1973,6 +2034,7 @@ impl<I> HasScalabilityMonitor for NopState<I> {
 #[cfg(test)]
 mod test {
     use crate::{inputs::BytesInput, state::StdState};
+    use crate::bitmap::BitmapTrait;
 
     #[test]
     fn test_std_state() {
@@ -1995,17 +2057,20 @@ mod test {
         // check that the loadcfg works
         let mut state: StdState<BytesInput, _, _, _> =
             StdState::nop::<BytesInput>().expect("couldn't instantiate the test state");
-        assert_eq!(state.global_frontier_bitmap.len(), MAP_SIZE);
-        assert_eq!(state.initial_frontier_bitmap.len(), MAP_SIZE);
-        assert_eq!(state.local_covered.len(), MAP_SIZE);
+        
+        let mut map_size: usize = unsafe { MAP_SIZE };
+        assert_eq!(state.global_frontier_bitmap.len(), map_size);
+        assert_eq!(state.initial_frontier_bitmap.len(), map_size);
+        assert_eq!(state.local_covered.len(), map_size);
 
         let key: &str = "AFL_CFG_PATH";
         let old_cfg_path = std::env::var(key);
         std::env::set_var(key, fname);
 
         state.use_setcover_schedule();
+        map_size = unsafe { MAP_SIZE };
         assert!(state.use_setcover_scheduling);
-        assert!(state.virgin_bits.len() == MAP_SIZE);
+        assert!(state.virgin_bits.len() == map_size);
         assert_eq!(state.successor_count[0], 1);
         assert_eq!(state.successor_count[6], 1);
         assert_eq!(state.successor_map[0][0], 1);
@@ -2040,9 +2105,10 @@ mod test {
         // check that the loadcfg works
         let mut state: StdState<BytesInput, _, _, _> =
             StdState::nop::<BytesInput>().expect("couldn't instantiate the test state");
-        assert_eq!(state.global_frontier_bitmap.len(), MAP_SIZE);
-        assert_eq!(state.initial_frontier_bitmap.len(), MAP_SIZE);
-        assert_eq!(state.local_covered.len(), MAP_SIZE);
+        let map_size = unsafe { MAP_SIZE };
+        assert_eq!(state.global_frontier_bitmap.len(), map_size);
+        assert_eq!(state.initial_frontier_bitmap.len(), map_size);
+        assert_eq!(state.local_covered.len(), map_size);
 
         let key: &str = "AFL_CFG_PATH";
         let old_cfg_path = std::env::var(key);

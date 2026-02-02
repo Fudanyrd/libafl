@@ -101,6 +101,15 @@ struct Opt {
     output: PathBuf,
 
     #[arg(
+        short,
+        long,
+        help = "Set the output directory of crashes, default is ./crashes",
+        name = "CRASHES",
+        default_value = "./crashes"
+    )]
+    crashes: PathBuf,
+
+    #[arg(
     value_parser = timeout_from_millis_str,
     short,
     long,
@@ -177,7 +186,7 @@ pub extern "C" fn libafl_main() {
                 OnDiskCorpus::new(&opt.output).unwrap(),
                 // Corpus in which we store solutions (crashes in this example),
                 // on disk so the user can get them after stopping the fuzzer
-                OnDiskCorpus::new(&opt.output).unwrap(),
+                OnDiskCorpus::new(&opt.crashes).unwrap(),
                 // States of the feedbacks.
                 // The feedbacks can report the data that should persist in the State.
                 &mut feedback,
@@ -186,6 +195,12 @@ pub extern "C" fn libafl_main() {
             )
             .unwrap()
         });
+
+        #[cfg(feature = "setcover")]
+        {
+            println!("Use setcover feature");
+            state.use_setcover_schedule();
+        }
 
         println!("We're a client, let's fuzz :)");
 
@@ -256,8 +271,6 @@ pub extern "C" fn libafl_main() {
 
         // In case the corpus is empty (on first run), reset
         if state.must_load_initial_inputs() {
-            #[cfg(feature = "setcover")]
-            state.use_setcover_schedule();
 
             state
                 .load_initial_inputs_forced(
